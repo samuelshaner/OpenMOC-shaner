@@ -3,41 +3,43 @@
 PapiProfiler::PapiProfiler(int num_threads) {
 
 	if( num_threads > 0){
-		_thrset_arr = (papiThreadSet *) malloc( sizeof(papiThreadSet) * num_threads);
-		if( _thrset_arr == NULL){
-			log_printf(ERROR, "Could not allocate thrset_arr");
-			exit(1);
-		}
 		_num_threads = num_threads;
+		for(int i; i<num_threads; i++){
+			_thrset_arr.push_back(papiThreadSet({PAPI_NULL, NULL, false}));
+		}
 	}
 	else{
 		log_printf(ERROR, "Num threads must be positive integer");
 	}
 
-	log_printf(NORMAL, "PAPI Profiler created");
+	log_printf(NORMAL, "PAPI Profiler initialized");
 
 }
 
 PapiProfiler::~PapiProfiler() {
-
-	free(_thrset_arr);
 
 }
 
 int PapiProfiler::init() {
 
 	int retval;
+	int status;
 
-    /* Init PAPI library */
-    printf("\nIntializing PAPI...\n");
-    if ((retval = PAPI_library_init(PAPI_VER_CURRENT)) != PAPI_VER_CURRENT) {
-        handleError("Could not init PAPI", retval);
-    }
+	status = PAPI_is_initialized();
+	if( status == PAPI_NOT_INITED ){
 
-    retval = PAPI_thread_init(pthread_self);
-    if( retval != PAPI_OK ){
-        handleError("Could not init PAPI threads", retval);
-    }
+	    /* Init PAPI library */
+	    log_printf(NORMAL, "Intializing PAPI...");
+	    if ((retval = PAPI_library_init(PAPI_VER_CURRENT)) != PAPI_VER_CURRENT) {
+	        handleError("Could not init PAPI", retval);
+	    }
+
+	    /* Init threading */
+	    retval = PAPI_thread_init(pthread_self);
+	    if( retval != PAPI_OK ){
+	        handleError("Could not init PAPI threads", retval);
+	    }
+	}
 
     return retval;
 
@@ -58,9 +60,13 @@ int PapiProfiler::addEvent(char *event) {
         return handleError("Could not convert event name to code", retval);
     }
     _EventCodes.push_back(EventCode);
-    printf("Added [%s] to the Event Set. %lu total events.\n", event, _EventCodes.size());
+    log_printf(NORMAL, "Added [%s]: %lu total events.", event, _EventCodes.size());
     
     return retval;
+}
+
+int PapiProfiler::getNumEvents() {
+	return _EventCodes.size();
 }
 
 int PapiProfiler::clearEvents() {
@@ -76,82 +82,130 @@ int PapiProfiler::clearEvents() {
 void PapiProfiler::setNumThreads(int num_threads){
 
 	if( num_threads > _num_threads){
-		_thrset_arr = 
-			(papiThreadSet *) realloc( _thrset_arr, sizeof(papiThreadSet) * num_threads);
-		if( _thrset_arr == NULL){
-			log_printf(ERROR,"Could not realloc thrset_arr");
+		for(int i; i< (num_threads - _num_threads) ; i++){
+			_thrset_arr.push_back(papiThreadSet({PAPI_NULL, NULL, false}));
 		}
-
 	}
-	log_printf(NORMAL,"Changing PAPI numthreads from %d to %d", _num_threads, num_threads);
+	/*** TODO: remove vector elements if num_thrads decreases ***/
+	log_printf(NORMAL,"Changed PAPI numthreads from %d to %d", _num_threads, num_threads);
 	_num_threads = num_threads;
 }
 
-/* Each thread calls this in the parallel section */
-int PapiProfiler::initThreadSet() {
+int PapiProfiler::initThreadSet(int tid) {
 
-    int i,j;
+    int i;
     int retval;
-    std::vector<int>::iterator it;
+    int status;
 
-    for(j=0; j<_num_threads; j++){
+    int *EventSet = &(_thrset_arr[tid].EventSet);
 
-	    int *EventSet = &(_thrset_arr[j].EventSet);
-	    *EventSet = PAPI_NULL;
-
+    if( *EventSet == PAPI_NULL ){
 	    retval = PAPI_create_eventset(EventSet);
 	    if ( retval != PAPI_OK ) {
 	        handleError("Could not create Event Set for thread", retval);
 	    }
+	    log_printf(NORMAL, "Created EventSet %d", tid);
+    }
 
-	    for(i=0; i<_EventCodes.size(); i++){
-	        retval = PAPI_add_event( *EventSet, _EventCodes[i]);
-	        if ( retval != PAPI_OK ) {
-	            handleError("Thread PAPI: Could not add event", retval);
-	        }
+	if( _thrset_arr[tid].init == false ){
+
+	    _thrset_arr[tid].values = 
+	    	(long long *) malloc( sizeof(long long) * _EventCodes.size() );
+	    if( _thrset_arr[tid].values == NULL){
+	    	log_printf(ERROR,"Could not allocate thr set values");
 	    }
 
-	    _thrset_arr[j].values = 
-	    	(long long *) malloc( sizeof(long long) * _EventCodes.size() );
+	    for(i=0; i<_EventCodes.size(); i++){
+	    	_thrset_arr[tid].values[i] = 0;
+	        retval = PAPI_add_event( *EventSet, _EventCodes[i]);
+	        if ( retval != PAPI_OK )
+	            handleError("Thread PAPI: Could not add event", retval);
+	    }
+
+	    _thrset_arr[tid].init = true;
+
+	    log_printf(NORMAL, "Papi Thread %d EventSet initialized", tid);
+
 	}
 
     return retval;
 }
 
-int PapiProfiler::startThreadSet(papiThreadSet *thrset) {
+int PapiProfiler::startThreadSet(int tid) {
 
     int retval;
+    int status;
+    int *EventSet = &(_thrset_arr[tid].EventSet);
 
-    retval = PAPI_start(thrset->EventSet);
-    if(retval != PAPI_OK) {
-        handleError("Thread PAPI: Could not start event", retval);
-    }
+    if( (retval = PAPI_state(*EventSet, &status)) != PAPI_OK)
+    	handleError("Could not get EventSet status", retval);
+
+    if( status == PAPI_STOPPED ) {
+
+	    retval = PAPI_start(*EventSet);
+	    if(retval != PAPI_OK)
+	        handleError("Thread PAPI: Could not start event", retval);
+        // log_printf(NORMAL, "PAPI Thread %d started counting", tid);
+	}
 
     return retval;
 }
 
-int PapiProfiler::stopThreadSet(papiThreadSet *thrset) {
+int PapiProfiler::accumThreadSet(int tid) {
+
+	int retval;
+	int status;
+	int *EventSet = &(_thrset_arr[tid].EventSet);
+	long long *values = _thrset_arr[tid].values;
+
+    if( (retval = PAPI_state(*EventSet, &status)) != PAPI_OK)
+    	handleError("Could not get EventSet status", retval);
+
+    if( status == PAPI_RUNNING ) {
+    	retval = PAPI_accum(*EventSet, values);
+	    if ( retval != PAPI_OK ) {
+	        handleError("Thread PAPI: Could not accum events", retval);
+	    }
+    }
+
+	return retval;
+}
+
+int PapiProfiler::stopThreadSet(int tid) {
 
     int retval;
-    int *EventSet = &thrset->EventSet;
-    long long *values = thrset->values; 
-    retval = PAPI_stop( *EventSet, values);
-    if ( retval != PAPI_OK ) {
-        handleError("Thread PAPI: Could not stop events", retval);
-    }
+    int status;
+    int *EventSet = &(_thrset_arr[tid].EventSet);
+    long long *values = _thrset_arr[tid].values; 
+
+    retval = PAPI_state(*EventSet, &status);
+
+    if( status == PAPI_RUNNING ){
+	    retval = PAPI_stop( *EventSet, NULL);
+	    if ( retval != PAPI_OK ) {
+	        handleError("Thread PAPI: Could not stop events", retval);
+	    }
+	} else {
+		log_printf(ERROR, "EventSet %d not running", tid);
+	}
+
+	// log_printf(NORMAL, "PAPI Thread %d stopped counting", tid);
 
     return retval;
 }
 
-int PapiProfiler::clearThreadSet(papiThreadSet *thrset) {
+int PapiProfiler::clearThreadSet() {
     
     int retval;
+    int i;
 
-    retval = PAPI_cleanup_eventset(thrset->EventSet);
-    if(retval != PAPI_OK) {
-        handleError("Thread PAPI: Could not clear event set", retval);
-    }
-    free(thrset->values);
+    for(i=0; i < _num_threads; i++){
+	    retval = PAPI_cleanup_eventset(_thrset_arr[i].EventSet);
+	    if(retval != PAPI_OK) {
+	        handleError("Thread PAPI: Could not clear event set", retval);
+	    }
+	    free(_thrset_arr[i].values);
+	}
 
     return retval;
 }
@@ -161,8 +215,14 @@ int PapiProfiler::handleError(const char *msg, int retval) {
     return retval;
 }
 
-long long PapiProfiler::getEventCount(char *event) {
+void PapiProfiler::printEventCounts() {
+    
+    int i,j;
 
-    long long values;
-    return values;
+    for(i=0; i<_num_threads; i++){
+    	for(j=0; j<_EventCodes.size(); j++){
+    		printf("Thread %d counted %lld\n", i, _thrset_arr[i].values[j]);
+    	}
+    }
+
 }

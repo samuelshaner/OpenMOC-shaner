@@ -59,6 +59,7 @@ Solver::Solver(Geometry* geometry, TrackGenerator* track_generator) {
     _converged_source = false;
 
     _timer = new Timer();
+
 }
 
 
@@ -378,6 +379,12 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     flattenFSRFluxes(1.0);
     flattenFSRSources(1.0);
     zeroTrackFluxes();
+
+    /*** TEMP PAPI TESTING ********/
+
+    // max_iterations = 1;
+
+    /*****************************/
 
     /* Source iteration loop */
     for (int i=0; i < max_iterations; i++) {

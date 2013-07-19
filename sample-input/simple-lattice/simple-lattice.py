@@ -118,6 +118,7 @@ track_generator.generateTracks()
 ###############################################################################
 
 solver = CPUSolver(geometry, track_generator)
+
 solver.setNumThreads(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)

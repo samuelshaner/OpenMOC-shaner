@@ -40,6 +40,11 @@ class CPUSolver : public Solver {
 
 protected:
 
+    /******* PAPI *******/
+    PapiProfiler *_papiProfiler;
+
+    /********************/
+
     /** The number of shared memory OpenMP threads */
     int _num_threads;
 

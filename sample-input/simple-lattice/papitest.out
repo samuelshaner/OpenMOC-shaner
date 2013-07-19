@@ -1,0 +1,46 @@
+[  NORMAL ]  Importing materials data from HDF5...
+[  NORMAL ]  Creating surfaces...
+[  NORMAL ]  Creating cells...
+[  NORMAL ]  Creating simple 4 x 4 lattice...
+[  NORMAL ]  Creating geometry...
+[  NORMAL ]  Number of flat source regions: 32
+[  NORMAL ]  Initializing the track generator...
+[  NORMAL ]  Reading tracks in from file
+[  NORMAL ]  Initializing track boundary conditions...
+[  NORMAL ]  PAPI Profiler initialized
+[  NORMAL ]  Intializing PAPI...
+[  NORMAL ]  Changed PAPI numthreads from 1 to 4
+[  NORMAL ]  Converging the source...
+[  NORMAL ]  Iteration 0: 	k_eff = 1.000000	res = 0.000E+00
+[  NORMAL ]  Added [PAPI_TOT_CYC]: 1 total events.
+[  NORMAL ]  Created EventSet 0
+thread 0 not inited
+[  NORMAL ]  Created EventSet 2
+thread 2 not inited
+[  NORMAL ]  Created EventSet 1
+thread 1 not inited
+[  NORMAL ]  Created EventSet 3
+thread 3 not inited
+[  NORMAL ]  Papi Thread 0 EventSet initialized
+[  NORMAL ]  Papi Thread 1 EventSet initialized
+[  NORMAL ]  Papi Thread 2 EventSet initialized
+[  NORMAL ]  Papi Thread 3 EventSet initialized
+[ WARNING ]  Unable to converge the source after 1 iterations
+[  TITLE  ]  *******************************************************************
+[  TITLE  ]                             TIMING REPORT                           
+[  TITLE  ]  *******************************************************************
+[  RESULT ]  Total time to solution...............................2.0018E-03 sec
+[  RESULT ]  Solution time per unknown............................8.9365E-06 sec
+[  RESULT ]  Solution time per iteration..........................2.0018E-03 sec
+[  RESULT ]  Integration time per track segment...................6.2556E-07 sec
+[  RESULT ]  Adding the source term to the flux...................1.8680E-06 sec
+[  RESULT ]  Computing FSR sources................................8.6600E-06 sec
+[  RESULT ]  Computing reaction rates and keff....................2.7819E-05 sec
+[  RESULT ]  Normalizing the flux.................................9.6610E-06 sec
+[  RESULT ]  Total time to converge the source....................2.0018E-03 sec
+[  RESULT ]  Transport sweep across the geometry..................1.5219E-03 sec
+[SEPARATOR]  *******************************************************************
+[  NORMAL ]  Plotting data...
+[  TITLE  ]  *******************************************************************
+[  TITLE  ]                               Finished                             
+[  TITLE  ]  *******************************************************************

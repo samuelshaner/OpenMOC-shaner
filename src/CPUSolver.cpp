@@ -20,6 +20,14 @@ CPUSolver::CPUSolver(Geometry* geom, TrackGenerator* track_generator) :
     _exponentials = NULL;
 
     _interpolate_exponent = true;
+    _papiProfiler = new PapiProfiler(1);
+
+    /**** PAPI ******/ 
+
+    _papiProfiler->init();
+
+    /****************/
+
 }
 
 
@@ -38,6 +46,9 @@ CPUSolver::~CPUSolver() {
 
     if (_exponentials != NULL)
         delete [] _exponentials;
+
+    if (_papiProfiler != NULL)
+        delete _papiProfiler;
 }
 
 
@@ -140,6 +151,9 @@ void CPUSolver::setNumThreads(int num_threads) {
 		   "to %d since it is less than or equal to 0", num_threads);
 
     _num_threads = num_threads;
+
+    if(_papiProfiler != NULL)
+        _papiProfiler->setNumThreads(num_threads);
 
     /* Set the number of threads for OpenMP */
     omp_set_num_threads(_num_threads);
@@ -696,6 +710,13 @@ void CPUSolver::transportSweep() {
     segment* curr_segment;    
     FP_PRECISION* track_flux;
 
+    /**** PAPI TESTING ****/
+
+    if( _papiProfiler->getNumEvents() < 1 )
+        _papiProfiler->addEvent("PAPI_TOT_INS");
+
+    /*********************/
+
     log_printf(DEBUG, "Transport sweep with %d OpenMP threads", _num_threads);
 
     /* Initialize flux in each region to zero */
@@ -708,10 +729,10 @@ void CPUSolver::transportSweep() {
          * this azimuthal angular halfspace */
         min_track = i * (_tot_num_tracks / 2);
 	max_track = (i + 1) * (_tot_num_tracks / 2);
-	
+
 	/* Loop over each thread within this azimuthal angle halfspace */
 	#pragma omp parallel for private(curr_track, num_segments, \
-	  curr_segment, track_flux, tid )
+	                               curr_segment, track_flux, tid)
 	for (int track_id=min_track; track_id < max_track; track_id++) {
 
 	    tid = omp_get_thread_num();
@@ -721,12 +742,22 @@ void CPUSolver::transportSweep() {
 	    num_segments = curr_track->getNumSegments();
 	    track_flux = &_boundary_flux(track_id,0,0,0);
 
+        /*** CODE SECTION 0 ****/
+
+        _papiProfiler->initThreadSet(tid);
+        _papiProfiler->startThreadSet(tid);
+
 	    /* Loop over each segment in forward direction */
 	    for (int s=0; s < num_segments; s++) {
 	        curr_segment = curr_track->getSegment(s);
 		scalarFluxTally(curr_segment, track_flux, 
 	                        &_thread_fsr_flux(tid));
 	    }
+
+        _papiProfiler->accumThreadSet(tid);
+        _papiProfiler->stopThreadSet(tid);
+
+        /***********************/
 
 	    /* Transfer flux to outgoing track */
 	    transferBoundaryFlux(track_id, true, track_flux);
@@ -744,6 +775,8 @@ void CPUSolver::transportSweep() {
 	    transferBoundaryFlux(track_id, false, track_flux);
 	}
     }
+
+    _papiProfiler->printEventCounts();
 
     return;
 }

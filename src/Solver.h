@@ -8,9 +8,14 @@
 #ifndef SOLVER_H_
 #define SOLVER_H_
 
+#define NUM_SECTIONS 1
+
 #ifdef __cplusplus
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <vector>
+#include <string>
+#include "PapiProfiler.h"
 #include "Timer.h"
 #include "Quadrature.h"
 #include "TrackGenerator.h"
@@ -44,7 +49,6 @@
 
 /** The values of 1 divided by 4pi: \f$ \frac{1}{4\pi} \f$ */
 #define ONE_OVER_FOUR_PI 0.0795774715
-
 
 /**
  * @class Solver Solver.h "openmoc/src/host/Solver.h"
@@ -220,6 +224,7 @@ public:
 
     virtual FP_PRECISION convergeSource(int max_iterations);
     virtual void computePinPowers() =0;
+
 
     void printTimerReport();
 };

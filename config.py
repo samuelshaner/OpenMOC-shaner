@@ -56,7 +56,8 @@ sources['gcc'] = ['openmoc/openmoc.i',
                   'src/Timer.cpp',
                   'src/Track.cpp',
                   'src/TrackGenerator.cpp',
-                  'src/Universe.cpp']
+                  'src/Universe.cpp',
+                  'src/PapiProfiler.cpp']
 
 sources['icpc'] = ['openmoc/openmoc.i',
                   'src/Cell.cpp',
@@ -74,7 +75,8 @@ sources['icpc'] = ['openmoc/openmoc.i',
                   'src/Timer.cpp',
                   'src/Track.cpp',
                   'src/TrackGenerator.cpp',
-                  'src/Universe.cpp']
+                  'src/Universe.cpp',
+                  'src/PapiProfiler.cpp']
 
 sources['nvcc'] = ['openmoc/cuda/openmoc_cuda.i',
                    'src/dev/gpu/clone.cu',
@@ -108,7 +110,8 @@ compiler_flags['gcc'] = ['-c',
                          '-O3', 
                          '-fopenmp', 
                          '-std=c++0x', 
-                         '-fpic']
+                         '-fpic',
+                         '-L/usr/local/lib']
 
 compiler_flags['icpc'] =['-c', 
                          '-O3', 
@@ -143,6 +146,7 @@ linker_flags['gcc'] = ['-lstdc++',
                        '-ldl',
                        '-lpthread',
                        '-lm',
+                       '-lpapi',
                        '-Wl,-soname,_openmoc.so']
 
 linker_flags['icpc'] = ['-lstdc++', 

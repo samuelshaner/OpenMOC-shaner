@@ -14,6 +14,7 @@ typedef struct _papiThreadSet{
 
 	int EventSet;
 	long long *values;
+	bool init;
 
 } papiThreadSet;
 
@@ -22,7 +23,7 @@ class PapiProfiler {
 protected:
 
 	std::vector<int> _EventCodes;
-	papiThreadSet *_thrset_arr;
+	std::vector<papiThreadSet> _thrset_arr;
 	int _num_threads;
 
 public:
@@ -33,14 +34,16 @@ public:
 	int init();
     int handleError(const char* msg, int retval);
     int addEvent(char *event);
+    int getNumEvents();
     int clearEvents();
-    long long getEventCount(char *event);
+    void printEventCounts();
 
     void setNumThreads(int num_threads);
-    int initThreadSet();
-    int startThreadSet(papiThreadSet *thrset);
-    int stopThreadSet(papiThreadSet *thrset);
-    int clearThreadSet(papiThreadSet *thrset);
+    int initThreadSet(int tid);
+    int startThreadSet(int tid);
+    int accumThreadSet(int tid);
+    int stopThreadSet(int tid);
+    int clearThreadSet();
 
 };
 
