@@ -8,11 +8,11 @@ import openmoc.plotter as plotter
 #######################   Main Simulation Parameters   ########################
 ###############################################################################
 
-num_threads = 4
-track_spacing = 0.1
-num_azim = 16
-tolerance = 1E-5
-max_iters = 1000
+num_threads = options.num_omp_threads
+track_spacing = options.track_spacing
+num_azim = options.num_azim
+tolerance = options.tolerance
+max_iters = options.max_iters
 
 log.setLogLevel('NORMAL')
 
@@ -113,7 +113,7 @@ track_generator.generateTracks()
 ###########################   Running a Simulation   ##########################
 ###############################################################################
 
-solver = CPUSolver(geometry, track_generator)
+solver = ThreadPrivateSolver(geometry, track_generator)
 solver.setNumThreads(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)

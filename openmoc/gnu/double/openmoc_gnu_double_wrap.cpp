@@ -2976,10 +2976,9 @@ SWIG_Python_NonDynamicSetAttr(PyObject *obj, PyObject *name, PyObject *value) {
 #define SWIGTYPE_p_std__mapT_short_Universe_p_t swig_types[31]
 #define SWIGTYPE_p_std__string swig_types[32]
 #define SWIGTYPE_p_std__vectorT_CellBasic_p_t swig_types[33]
-#define SWIGTYPE_p_std__vectorT_segment_p_t swig_types[34]
-#define SWIGTYPE_p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t swig_types[35]
-static swig_type_info *swig_types[37];
-static swig_module_info swig_module = {swig_types, 36, 0, 0, 0, 0};
+#define SWIGTYPE_p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t swig_types[34]
+static swig_type_info *swig_types[36];
+static swig_module_info swig_module = {swig_types, 35, 0, 0, 0, 0};
 #define SWIG_TypeQuery(name) SWIG_TypeQueryModule(&swig_module, &swig_module, name)
 #define SWIG_MangledTypeQuery(name) SWIG_MangledTypeQueryModule(&swig_module, &swig_module, name)
 
@@ -8826,7 +8825,7 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_Material_setSigmaT(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+SWIGINTERN PyObject *_wrap_Material_setSigmaT__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Material *arg1 = (Material *) 0 ;
   double *arg2 = (double *) 0 ;
@@ -8837,11 +8836,8 @@ SWIGINTERN PyObject *_wrap_Material_setSigmaT(PyObject *SWIGUNUSEDPARM(self), Py
   int is_new_object2 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
-  char *  kwnames[] = {
-    (char *) "self",(char *) "sigma_t", NULL 
-  };
   
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Material_setSigmaT",kwnames,&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"OO:Material_setSigmaT",&obj0,&obj1)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
   if (!SWIG_IsOK(res1)) {
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaT" "', argument " "1"" of type '" "Material *""'"); 
@@ -8887,7 +8883,7 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_Material_setSigmaA(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+SWIGINTERN PyObject *_wrap_Material_setSigmaA__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Material *arg1 = (Material *) 0 ;
   double *arg2 = (double *) 0 ;
@@ -8898,11 +8894,8 @@ SWIGINTERN PyObject *_wrap_Material_setSigmaA(PyObject *SWIGUNUSEDPARM(self), Py
   int is_new_object2 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
-  char *  kwnames[] = {
-    (char *) "self",(char *) "sigma_a", NULL 
-  };
   
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Material_setSigmaA",kwnames,&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"OO:Material_setSigmaA",&obj0,&obj1)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
   if (!SWIG_IsOK(res1)) {
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaA" "', argument " "1"" of type '" "Material *""'"); 
@@ -8948,7 +8941,7 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_Material_setSigmaS(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+SWIGINTERN PyObject *_wrap_Material_setSigmaS__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Material *arg1 = (Material *) 0 ;
   double *arg2 = (double *) 0 ;
@@ -8959,11 +8952,8 @@ SWIGINTERN PyObject *_wrap_Material_setSigmaS(PyObject *SWIGUNUSEDPARM(self), Py
   int is_new_object2 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
-  char *  kwnames[] = {
-    (char *) "self",(char *) "sigma_s", NULL 
-  };
   
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Material_setSigmaS",kwnames,&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"OO:Material_setSigmaS",&obj0,&obj1)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
   if (!SWIG_IsOK(res1)) {
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaS" "', argument " "1"" of type '" "Material *""'"); 
@@ -9009,7 +8999,7 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_Material_setSigmaF(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+SWIGINTERN PyObject *_wrap_Material_setSigmaF__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Material *arg1 = (Material *) 0 ;
   double *arg2 = (double *) 0 ;
@@ -9020,11 +9010,8 @@ SWIGINTERN PyObject *_wrap_Material_setSigmaF(PyObject *SWIGUNUSEDPARM(self), Py
   int is_new_object2 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
-  char *  kwnames[] = {
-    (char *) "self",(char *) "sigma_f", NULL 
-  };
   
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Material_setSigmaF",kwnames,&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"OO:Material_setSigmaF",&obj0,&obj1)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
   if (!SWIG_IsOK(res1)) {
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaF" "', argument " "1"" of type '" "Material *""'"); 
@@ -9070,7 +9057,7 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_Material_setNuSigmaF(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+SWIGINTERN PyObject *_wrap_Material_setNuSigmaF__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Material *arg1 = (Material *) 0 ;
   double *arg2 = (double *) 0 ;
@@ -9081,11 +9068,8 @@ SWIGINTERN PyObject *_wrap_Material_setNuSigmaF(PyObject *SWIGUNUSEDPARM(self), 
   int is_new_object2 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
-  char *  kwnames[] = {
-    (char *) "self",(char *) "nu_sigma_f", NULL 
-  };
   
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Material_setNuSigmaF",kwnames,&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"OO:Material_setNuSigmaF",&obj0,&obj1)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
   if (!SWIG_IsOK(res1)) {
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setNuSigmaF" "', argument " "1"" of type '" "Material *""'"); 
@@ -9131,7 +9115,7 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_Material_setChi(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+SWIGINTERN PyObject *_wrap_Material_setChi__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Material *arg1 = (Material *) 0 ;
   double *arg2 = (double *) 0 ;
@@ -9142,11 +9126,8 @@ SWIGINTERN PyObject *_wrap_Material_setChi(PyObject *SWIGUNUSEDPARM(self), PyObj
   int is_new_object2 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
-  char *  kwnames[] = {
-    (char *) "self",(char *) "chi", NULL 
-  };
   
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Material_setChi",kwnames,&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"OO:Material_setChi",&obj0,&obj1)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
   if (!SWIG_IsOK(res1)) {
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setChi" "', argument " "1"" of type '" "Material *""'"); 
@@ -9189,6 +9170,657 @@ fail:
     }
   }
   return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaT__SWIG_1(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Material *arg1 = (Material *) 0 ;
+  double arg2 ;
+  int arg3 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  double val2 ;
+  int ecode2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OOO:Material_setSigmaT",&obj0,&obj1,&obj2)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaT" "', argument " "1"" of type '" "Material *""'"); 
+  }
+  arg1 = reinterpret_cast< Material * >(argp1);
+  ecode2 = SWIG_AsVal_double(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Material_setSigmaT" "', argument " "2"" of type '" "double""'");
+  } 
+  arg2 = static_cast< double >(val2);
+  ecode3 = SWIG_AsVal_int(obj2, &val3);
+  if (!SWIG_IsOK(ecode3)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "Material_setSigmaT" "', argument " "3"" of type '" "int""'");
+  } 
+  arg3 = static_cast< int >(val3);
+  {
+    try {
+      (arg1)->setSigmaT(arg2,arg3);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaT(PyObject *self, PyObject *args) {
+  int argc;
+  PyObject *argv[4];
+  int ii;
+  
+  if (!PyTuple_Check(args)) SWIG_fail;
+  argc = args ? (int)PyObject_Length(args) : 0;
+  for (ii = 0; (ii < 3) && (ii < argc); ii++) {
+    argv[ii] = PyTuple_GET_ITEM(args,ii);
+  }
+  if (argc == 2) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        _v = is_array(argv[1]) || PySequence_Check(argv[1]);
+      }
+      if (_v) {
+        if (argc <= 2) {
+          return _wrap_Material_setSigmaT__SWIG_0(self, args);
+        }
+        return _wrap_Material_setSigmaT__SWIG_0(self, args);
+      }
+    }
+  }
+  if (argc == 3) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        int res = SWIG_AsVal_double(argv[1], NULL);
+        _v = SWIG_CheckState(res);
+      }
+      if (_v) {
+        {
+          int res = SWIG_AsVal_int(argv[2], NULL);
+          _v = SWIG_CheckState(res);
+        }
+        if (_v) {
+          return _wrap_Material_setSigmaT__SWIG_1(self, args);
+        }
+      }
+    }
+  }
+  
+fail:
+  SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number or type of arguments for overloaded function 'Material_setSigmaT'.\n"
+    "  Possible C/C++ prototypes are:\n"
+    "    Material::setSigmaT(double *,int)\n"
+    "    Material::setSigmaT(double,int)\n");
+  return 0;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaA__SWIG_1(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Material *arg1 = (Material *) 0 ;
+  double arg2 ;
+  int arg3 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  double val2 ;
+  int ecode2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OOO:Material_setSigmaA",&obj0,&obj1,&obj2)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaA" "', argument " "1"" of type '" "Material *""'"); 
+  }
+  arg1 = reinterpret_cast< Material * >(argp1);
+  ecode2 = SWIG_AsVal_double(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Material_setSigmaA" "', argument " "2"" of type '" "double""'");
+  } 
+  arg2 = static_cast< double >(val2);
+  ecode3 = SWIG_AsVal_int(obj2, &val3);
+  if (!SWIG_IsOK(ecode3)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "Material_setSigmaA" "', argument " "3"" of type '" "int""'");
+  } 
+  arg3 = static_cast< int >(val3);
+  {
+    try {
+      (arg1)->setSigmaA(arg2,arg3);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaA(PyObject *self, PyObject *args) {
+  int argc;
+  PyObject *argv[4];
+  int ii;
+  
+  if (!PyTuple_Check(args)) SWIG_fail;
+  argc = args ? (int)PyObject_Length(args) : 0;
+  for (ii = 0; (ii < 3) && (ii < argc); ii++) {
+    argv[ii] = PyTuple_GET_ITEM(args,ii);
+  }
+  if (argc == 2) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        _v = is_array(argv[1]) || PySequence_Check(argv[1]);
+      }
+      if (_v) {
+        if (argc <= 2) {
+          return _wrap_Material_setSigmaA__SWIG_0(self, args);
+        }
+        return _wrap_Material_setSigmaA__SWIG_0(self, args);
+      }
+    }
+  }
+  if (argc == 3) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        int res = SWIG_AsVal_double(argv[1], NULL);
+        _v = SWIG_CheckState(res);
+      }
+      if (_v) {
+        {
+          int res = SWIG_AsVal_int(argv[2], NULL);
+          _v = SWIG_CheckState(res);
+        }
+        if (_v) {
+          return _wrap_Material_setSigmaA__SWIG_1(self, args);
+        }
+      }
+    }
+  }
+  
+fail:
+  SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number or type of arguments for overloaded function 'Material_setSigmaA'.\n"
+    "  Possible C/C++ prototypes are:\n"
+    "    Material::setSigmaA(double *,int)\n"
+    "    Material::setSigmaA(double,int)\n");
+  return 0;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaF__SWIG_1(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Material *arg1 = (Material *) 0 ;
+  double arg2 ;
+  int arg3 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  double val2 ;
+  int ecode2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OOO:Material_setSigmaF",&obj0,&obj1,&obj2)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaF" "', argument " "1"" of type '" "Material *""'"); 
+  }
+  arg1 = reinterpret_cast< Material * >(argp1);
+  ecode2 = SWIG_AsVal_double(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Material_setSigmaF" "', argument " "2"" of type '" "double""'");
+  } 
+  arg2 = static_cast< double >(val2);
+  ecode3 = SWIG_AsVal_int(obj2, &val3);
+  if (!SWIG_IsOK(ecode3)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "Material_setSigmaF" "', argument " "3"" of type '" "int""'");
+  } 
+  arg3 = static_cast< int >(val3);
+  {
+    try {
+      (arg1)->setSigmaF(arg2,arg3);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaF(PyObject *self, PyObject *args) {
+  int argc;
+  PyObject *argv[4];
+  int ii;
+  
+  if (!PyTuple_Check(args)) SWIG_fail;
+  argc = args ? (int)PyObject_Length(args) : 0;
+  for (ii = 0; (ii < 3) && (ii < argc); ii++) {
+    argv[ii] = PyTuple_GET_ITEM(args,ii);
+  }
+  if (argc == 2) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        _v = is_array(argv[1]) || PySequence_Check(argv[1]);
+      }
+      if (_v) {
+        if (argc <= 2) {
+          return _wrap_Material_setSigmaF__SWIG_0(self, args);
+        }
+        return _wrap_Material_setSigmaF__SWIG_0(self, args);
+      }
+    }
+  }
+  if (argc == 3) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        int res = SWIG_AsVal_double(argv[1], NULL);
+        _v = SWIG_CheckState(res);
+      }
+      if (_v) {
+        {
+          int res = SWIG_AsVal_int(argv[2], NULL);
+          _v = SWIG_CheckState(res);
+        }
+        if (_v) {
+          return _wrap_Material_setSigmaF__SWIG_1(self, args);
+        }
+      }
+    }
+  }
+  
+fail:
+  SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number or type of arguments for overloaded function 'Material_setSigmaF'.\n"
+    "  Possible C/C++ prototypes are:\n"
+    "    Material::setSigmaF(double *,int)\n"
+    "    Material::setSigmaF(double,int)\n");
+  return 0;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setNuSigmaF__SWIG_1(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Material *arg1 = (Material *) 0 ;
+  double arg2 ;
+  int arg3 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  double val2 ;
+  int ecode2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OOO:Material_setNuSigmaF",&obj0,&obj1,&obj2)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setNuSigmaF" "', argument " "1"" of type '" "Material *""'"); 
+  }
+  arg1 = reinterpret_cast< Material * >(argp1);
+  ecode2 = SWIG_AsVal_double(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Material_setNuSigmaF" "', argument " "2"" of type '" "double""'");
+  } 
+  arg2 = static_cast< double >(val2);
+  ecode3 = SWIG_AsVal_int(obj2, &val3);
+  if (!SWIG_IsOK(ecode3)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "Material_setNuSigmaF" "', argument " "3"" of type '" "int""'");
+  } 
+  arg3 = static_cast< int >(val3);
+  {
+    try {
+      (arg1)->setNuSigmaF(arg2,arg3);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setNuSigmaF(PyObject *self, PyObject *args) {
+  int argc;
+  PyObject *argv[4];
+  int ii;
+  
+  if (!PyTuple_Check(args)) SWIG_fail;
+  argc = args ? (int)PyObject_Length(args) : 0;
+  for (ii = 0; (ii < 3) && (ii < argc); ii++) {
+    argv[ii] = PyTuple_GET_ITEM(args,ii);
+  }
+  if (argc == 2) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        _v = is_array(argv[1]) || PySequence_Check(argv[1]);
+      }
+      if (_v) {
+        if (argc <= 2) {
+          return _wrap_Material_setNuSigmaF__SWIG_0(self, args);
+        }
+        return _wrap_Material_setNuSigmaF__SWIG_0(self, args);
+      }
+    }
+  }
+  if (argc == 3) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        int res = SWIG_AsVal_double(argv[1], NULL);
+        _v = SWIG_CheckState(res);
+      }
+      if (_v) {
+        {
+          int res = SWIG_AsVal_int(argv[2], NULL);
+          _v = SWIG_CheckState(res);
+        }
+        if (_v) {
+          return _wrap_Material_setNuSigmaF__SWIG_1(self, args);
+        }
+      }
+    }
+  }
+  
+fail:
+  SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number or type of arguments for overloaded function 'Material_setNuSigmaF'.\n"
+    "  Possible C/C++ prototypes are:\n"
+    "    Material::setNuSigmaF(double *,int)\n"
+    "    Material::setNuSigmaF(double,int)\n");
+  return 0;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaS__SWIG_1(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Material *arg1 = (Material *) 0 ;
+  double arg2 ;
+  int arg3 ;
+  int arg4 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  double val2 ;
+  int ecode2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
+  int val4 ;
+  int ecode4 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
+  PyObject * obj3 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OOOO:Material_setSigmaS",&obj0,&obj1,&obj2,&obj3)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setSigmaS" "', argument " "1"" of type '" "Material *""'"); 
+  }
+  arg1 = reinterpret_cast< Material * >(argp1);
+  ecode2 = SWIG_AsVal_double(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Material_setSigmaS" "', argument " "2"" of type '" "double""'");
+  } 
+  arg2 = static_cast< double >(val2);
+  ecode3 = SWIG_AsVal_int(obj2, &val3);
+  if (!SWIG_IsOK(ecode3)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "Material_setSigmaS" "', argument " "3"" of type '" "int""'");
+  } 
+  arg3 = static_cast< int >(val3);
+  ecode4 = SWIG_AsVal_int(obj3, &val4);
+  if (!SWIG_IsOK(ecode4)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode4), "in method '" "Material_setSigmaS" "', argument " "4"" of type '" "int""'");
+  } 
+  arg4 = static_cast< int >(val4);
+  {
+    try {
+      (arg1)->setSigmaS(arg2,arg3,arg4);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setSigmaS(PyObject *self, PyObject *args) {
+  int argc;
+  PyObject *argv[5];
+  int ii;
+  
+  if (!PyTuple_Check(args)) SWIG_fail;
+  argc = args ? (int)PyObject_Length(args) : 0;
+  for (ii = 0; (ii < 4) && (ii < argc); ii++) {
+    argv[ii] = PyTuple_GET_ITEM(args,ii);
+  }
+  if (argc == 2) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        _v = is_array(argv[1]) || PySequence_Check(argv[1]);
+      }
+      if (_v) {
+        if (argc <= 2) {
+          return _wrap_Material_setSigmaS__SWIG_0(self, args);
+        }
+        return _wrap_Material_setSigmaS__SWIG_0(self, args);
+      }
+    }
+  }
+  if (argc == 4) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        int res = SWIG_AsVal_double(argv[1], NULL);
+        _v = SWIG_CheckState(res);
+      }
+      if (_v) {
+        {
+          int res = SWIG_AsVal_int(argv[2], NULL);
+          _v = SWIG_CheckState(res);
+        }
+        if (_v) {
+          {
+            int res = SWIG_AsVal_int(argv[3], NULL);
+            _v = SWIG_CheckState(res);
+          }
+          if (_v) {
+            return _wrap_Material_setSigmaS__SWIG_1(self, args);
+          }
+        }
+      }
+    }
+  }
+  
+fail:
+  SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number or type of arguments for overloaded function 'Material_setSigmaS'.\n"
+    "  Possible C/C++ prototypes are:\n"
+    "    Material::setSigmaS(double *,int)\n"
+    "    Material::setSigmaS(double,int,int)\n");
+  return 0;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setChi__SWIG_1(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Material *arg1 = (Material *) 0 ;
+  double arg2 ;
+  int arg3 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  double val2 ;
+  int ecode2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"OOO:Material_setChi",&obj0,&obj1,&obj2)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Material, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Material_setChi" "', argument " "1"" of type '" "Material *""'"); 
+  }
+  arg1 = reinterpret_cast< Material * >(argp1);
+  ecode2 = SWIG_AsVal_double(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Material_setChi" "', argument " "2"" of type '" "double""'");
+  } 
+  arg2 = static_cast< double >(val2);
+  ecode3 = SWIG_AsVal_int(obj2, &val3);
+  if (!SWIG_IsOK(ecode3)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "Material_setChi" "', argument " "3"" of type '" "int""'");
+  } 
+  arg3 = static_cast< int >(val3);
+  {
+    try {
+      (arg1)->setChi(arg2,arg3);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Material_setChi(PyObject *self, PyObject *args) {
+  int argc;
+  PyObject *argv[4];
+  int ii;
+  
+  if (!PyTuple_Check(args)) SWIG_fail;
+  argc = args ? (int)PyObject_Length(args) : 0;
+  for (ii = 0; (ii < 3) && (ii < argc); ii++) {
+    argv[ii] = PyTuple_GET_ITEM(args,ii);
+  }
+  if (argc == 2) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        _v = is_array(argv[1]) || PySequence_Check(argv[1]);
+      }
+      if (_v) {
+        if (argc <= 2) {
+          return _wrap_Material_setChi__SWIG_0(self, args);
+        }
+        return _wrap_Material_setChi__SWIG_0(self, args);
+      }
+    }
+  }
+  if (argc == 3) {
+    int _v;
+    void *vptr = 0;
+    int res = SWIG_ConvertPtr(argv[0], &vptr, SWIGTYPE_p_Material, 0);
+    _v = SWIG_CheckState(res);
+    if (_v) {
+      {
+        int res = SWIG_AsVal_double(argv[1], NULL);
+        _v = SWIG_CheckState(res);
+      }
+      if (_v) {
+        {
+          int res = SWIG_AsVal_int(argv[2], NULL);
+          _v = SWIG_CheckState(res);
+        }
+        if (_v) {
+          return _wrap_Material_setChi__SWIG_1(self, args);
+        }
+      }
+    }
+  }
+  
+fail:
+  SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number or type of arguments for overloaded function 'Material_setChi'.\n"
+    "  Possible C/C++ prototypes are:\n"
+    "    Material::setChi(double *,int)\n"
+    "    Material::setChi(double,int)\n");
+  return 0;
 }
 
 
@@ -10672,6 +11304,66 @@ fail:
 }
 
 
+SWIGINTERN PyObject *_wrap_Solver_useExponentialInterpolation(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Solver *arg1 = (Solver *) 0 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  PyObject * obj0 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"O:Solver_useExponentialInterpolation",&obj0)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Solver, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Solver_useExponentialInterpolation" "', argument " "1"" of type '" "Solver *""'"); 
+  }
+  arg1 = reinterpret_cast< Solver * >(argp1);
+  {
+    try {
+      (arg1)->useExponentialInterpolation();
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Solver_useExponentialIntrinsic(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Solver *arg1 = (Solver *) 0 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  PyObject * obj0 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"O:Solver_useExponentialIntrinsic",&obj0)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Solver, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Solver_useExponentialIntrinsic" "', argument " "1"" of type '" "Solver *""'"); 
+  }
+  arg1 = reinterpret_cast< Solver * >(argp1);
+  {
+    try {
+      (arg1)->useExponentialIntrinsic();
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
 SWIGINTERN PyObject *_wrap_Solver_convergeSource(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
   PyObject *resultobj = 0;
   Solver *arg1 = (Solver *) 0 ;
@@ -10912,7 +11604,7 @@ SWIGINTERN PyObject *_wrap_new_CPUSolver(PyObject *SWIGUNUSEDPARM(self), PyObjec
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
   char *  kwnames[] = {
-    (char *) "geom",(char *) "track_generator", NULL 
+    (char *) "geometry",(char *) "track_generator", NULL 
   };
   CPUSolver *result = 0 ;
   
@@ -11196,66 +11888,6 @@ fail:
 }
 
 
-SWIGINTERN PyObject *_wrap_CPUSolver_useExponentialInterpolation(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
-  PyObject *resultobj = 0;
-  CPUSolver *arg1 = (CPUSolver *) 0 ;
-  void *argp1 = 0 ;
-  int res1 = 0 ;
-  PyObject * obj0 = 0 ;
-  
-  if (!PyArg_ParseTuple(args,(char *)"O:CPUSolver_useExponentialInterpolation",&obj0)) SWIG_fail;
-  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_CPUSolver, 0 |  0 );
-  if (!SWIG_IsOK(res1)) {
-    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "CPUSolver_useExponentialInterpolation" "', argument " "1"" of type '" "CPUSolver *""'"); 
-  }
-  arg1 = reinterpret_cast< CPUSolver * >(argp1);
-  {
-    try {
-      (arg1)->useExponentialInterpolation();
-    } catch (const std::runtime_error &e) {
-      SWIG_exception(SWIG_RuntimeError, err_occurred());
-      return NULL;
-    } catch (const std::exception &e) {
-      SWIG_exception(SWIG_RuntimeError, e.what()); 
-    }
-  }
-  resultobj = SWIG_Py_Void();
-  return resultobj;
-fail:
-  return NULL;
-}
-
-
-SWIGINTERN PyObject *_wrap_CPUSolver_useExponentialIntrinsic(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
-  PyObject *resultobj = 0;
-  CPUSolver *arg1 = (CPUSolver *) 0 ;
-  void *argp1 = 0 ;
-  int res1 = 0 ;
-  PyObject * obj0 = 0 ;
-  
-  if (!PyArg_ParseTuple(args,(char *)"O:CPUSolver_useExponentialIntrinsic",&obj0)) SWIG_fail;
-  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_CPUSolver, 0 |  0 );
-  if (!SWIG_IsOK(res1)) {
-    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "CPUSolver_useExponentialIntrinsic" "', argument " "1"" of type '" "CPUSolver *""'"); 
-  }
-  arg1 = reinterpret_cast< CPUSolver * >(argp1);
-  {
-    try {
-      (arg1)->useExponentialIntrinsic();
-    } catch (const std::runtime_error &e) {
-      SWIG_exception(SWIG_RuntimeError, err_occurred());
-      return NULL;
-    } catch (const std::exception &e) {
-      SWIG_exception(SWIG_RuntimeError, e.what()); 
-    }
-  }
-  resultobj = SWIG_Py_Void();
-  return resultobj;
-fail:
-  return NULL;
-}
-
-
 SWIGINTERN PyObject *_wrap_CPUSolver_computePinPowers(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   CPUSolver *arg1 = (CPUSolver *) 0 ;
@@ -11304,7 +11936,7 @@ SWIGINTERN PyObject *_wrap_new_ThreadPrivateSolver(PyObject *SWIGUNUSEDPARM(self
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
   char *  kwnames[] = {
-    (char *) "geom",(char *) "track_generator", NULL 
+    (char *) "geometry",(char *) "track_generator", NULL 
   };
   ThreadPrivateSolver *result = 0 ;
   
@@ -15362,7 +15994,7 @@ SWIGINTERN PyObject *_wrap_Track_getSegments(PyObject *SWIGUNUSEDPARM(self), PyO
   void *argp1 = 0 ;
   int res1 = 0 ;
   PyObject * obj0 = 0 ;
-  SwigValueWrapper< std::vector< segment * > > result;
+  segment *result = 0 ;
   
   if (!PyArg_ParseTuple(args,(char *)"O:Track_getSegments",&obj0)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Track, 0 |  0 );
@@ -15372,7 +16004,7 @@ SWIGINTERN PyObject *_wrap_Track_getSegments(PyObject *SWIGUNUSEDPARM(self), PyO
   arg1 = reinterpret_cast< Track * >(argp1);
   {
     try {
-      result = (arg1)->getSegments();
+      result = (segment *)(arg1)->getSegments();
     } catch (const std::runtime_error &e) {
       SWIG_exception(SWIG_RuntimeError, err_occurred());
       return NULL;
@@ -15380,7 +16012,7 @@ SWIGINTERN PyObject *_wrap_Track_getSegments(PyObject *SWIGUNUSEDPARM(self), PyO
       SWIG_exception(SWIG_RuntimeError, e.what()); 
     }
   }
-  resultobj = SWIG_NewPointerObj((new std::vector< segment * >(static_cast< const std::vector< segment * >& >(result))), SWIGTYPE_p_std__vectorT_segment_p_t, SWIG_POINTER_OWN |  0 );
+  resultobj = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_segment, 0 |  0 );
   return resultobj;
 fail:
   return NULL;
@@ -18050,12 +18682,12 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"Material_isDataAligned", _wrap_Material_isDataAligned, METH_VARARGS, NULL},
 	 { (char *)"Material_getNumVectorGroups", _wrap_Material_getNumVectorGroups, METH_VARARGS, NULL},
 	 { (char *)"Material_setNumEnergyGroups", (PyCFunction) _wrap_Material_setNumEnergyGroups, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"Material_setSigmaT", (PyCFunction) _wrap_Material_setSigmaT, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"Material_setSigmaA", (PyCFunction) _wrap_Material_setSigmaA, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"Material_setSigmaS", (PyCFunction) _wrap_Material_setSigmaS, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"Material_setSigmaF", (PyCFunction) _wrap_Material_setSigmaF, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"Material_setNuSigmaF", (PyCFunction) _wrap_Material_setNuSigmaF, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"Material_setChi", (PyCFunction) _wrap_Material_setChi, METH_VARARGS | METH_KEYWORDS, NULL},
+	 { (char *)"Material_setSigmaT", _wrap_Material_setSigmaT, METH_VARARGS, NULL},
+	 { (char *)"Material_setSigmaA", _wrap_Material_setSigmaA, METH_VARARGS, NULL},
+	 { (char *)"Material_setSigmaF", _wrap_Material_setSigmaF, METH_VARARGS, NULL},
+	 { (char *)"Material_setNuSigmaF", _wrap_Material_setNuSigmaF, METH_VARARGS, NULL},
+	 { (char *)"Material_setSigmaS", _wrap_Material_setSigmaS, METH_VARARGS, NULL},
+	 { (char *)"Material_setChi", _wrap_Material_setChi, METH_VARARGS, NULL},
 	 { (char *)"Material_checkSigmaT", _wrap_Material_checkSigmaT, METH_VARARGS, NULL},
 	 { (char *)"Material_toString", _wrap_Material_toString, METH_VARARGS, NULL},
 	 { (char *)"Material_printString", _wrap_Material_printString, METH_VARARGS, NULL},
@@ -18100,6 +18732,8 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"Solver_setPolarQuadratureType", (PyCFunction) _wrap_Solver_setPolarQuadratureType, METH_VARARGS | METH_KEYWORDS, NULL},
 	 { (char *)"Solver_setNumPolarAngles", (PyCFunction) _wrap_Solver_setNumPolarAngles, METH_VARARGS | METH_KEYWORDS, NULL},
 	 { (char *)"Solver_setSourceConvergenceThreshold", (PyCFunction) _wrap_Solver_setSourceConvergenceThreshold, METH_VARARGS | METH_KEYWORDS, NULL},
+	 { (char *)"Solver_useExponentialInterpolation", _wrap_Solver_useExponentialInterpolation, METH_VARARGS, NULL},
+	 { (char *)"Solver_useExponentialIntrinsic", _wrap_Solver_useExponentialIntrinsic, METH_VARARGS, NULL},
 	 { (char *)"Solver_convergeSource", (PyCFunction) _wrap_Solver_convergeSource, METH_VARARGS | METH_KEYWORDS, NULL},
 	 { (char *)"Solver_computePinPowers", _wrap_Solver_computePinPowers, METH_VARARGS, NULL},
 	 { (char *)"Solver_addPapiEvent", (PyCFunction) _wrap_Solver_addPapiEvent, METH_VARARGS | METH_KEYWORDS, NULL},
@@ -18115,8 +18749,6 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"CPUSolver_getFSRPowers", _wrap_CPUSolver_getFSRPowers, METH_VARARGS, NULL},
 	 { (char *)"CPUSolver_getFSRPinPowers", _wrap_CPUSolver_getFSRPinPowers, METH_VARARGS, NULL},
 	 { (char *)"CPUSolver_setNumThreads", (PyCFunction) _wrap_CPUSolver_setNumThreads, METH_VARARGS | METH_KEYWORDS, NULL},
-	 { (char *)"CPUSolver_useExponentialInterpolation", _wrap_CPUSolver_useExponentialInterpolation, METH_VARARGS, NULL},
-	 { (char *)"CPUSolver_useExponentialIntrinsic", _wrap_CPUSolver_useExponentialIntrinsic, METH_VARARGS, NULL},
 	 { (char *)"CPUSolver_computePinPowers", _wrap_CPUSolver_computePinPowers, METH_VARARGS, NULL},
 	 { (char *)"CPUSolver_swigregister", CPUSolver_swigregister, METH_VARARGS, NULL},
 	 { (char *)"new_ThreadPrivateSolver", (PyCFunction) _wrap_new_ThreadPrivateSolver, METH_VARARGS | METH_KEYWORDS, NULL},
@@ -18396,7 +19028,6 @@ static swig_type_info _swigt__p_std__mapT_short_Surface_p_t = {"_p_std__mapT_sho
 static swig_type_info _swigt__p_std__mapT_short_Universe_p_t = {"_p_std__mapT_short_Universe_p_t", "std::map< short,Universe * > *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_std__string = {"_p_std__string", "std::string *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_std__vectorT_CellBasic_p_t = {"_p_std__vectorT_CellBasic_p_t", "std::vector< CellBasic * > *", 0, 0, (void*)0, 0};
-static swig_type_info _swigt__p_std__vectorT_segment_p_t = {"_p_std__vectorT_segment_p_t", "std::vector< segment * > *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t = {"_p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t", "std::vector< std::vector< std::pair< short,Universe * > > > *", 0, 0, (void*)0, 0};
 
 static swig_type_info *swig_type_initial[] = {
@@ -18434,7 +19065,6 @@ static swig_type_info *swig_type_initial[] = {
   &_swigt__p_std__mapT_short_Universe_p_t,
   &_swigt__p_std__string,
   &_swigt__p_std__vectorT_CellBasic_p_t,
-  &_swigt__p_std__vectorT_segment_p_t,
   &_swigt__p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t,
 };
 
@@ -18472,7 +19102,6 @@ static swig_cast_info _swigc__p_std__mapT_short_Surface_p_t[] = {  {&_swigt__p_s
 static swig_cast_info _swigc__p_std__mapT_short_Universe_p_t[] = {  {&_swigt__p_std__mapT_short_Universe_p_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_std__string[] = {  {&_swigt__p_std__string, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_std__vectorT_CellBasic_p_t[] = {  {&_swigt__p_std__vectorT_CellBasic_p_t, 0, 0, 0},{0, 0, 0, 0}};
-static swig_cast_info _swigc__p_std__vectorT_segment_p_t[] = {  {&_swigt__p_std__vectorT_segment_p_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t[] = {  {&_swigt__p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t, 0, 0, 0},{0, 0, 0, 0}};
 
 static swig_cast_info *swig_cast_initial[] = {
@@ -18510,7 +19139,6 @@ static swig_cast_info *swig_cast_initial[] = {
   _swigc__p_std__mapT_short_Universe_p_t,
   _swigc__p_std__string,
   _swigc__p_std__vectorT_CellBasic_p_t,
-  _swigc__p_std__vectorT_segment_p_t,
   _swigc__p_std__vectorT_std__vectorT_std__pairT_short_Universe_p_t_t_t,
 };
 

@@ -10,9 +10,9 @@
  * @param geometry an optional pointer to the geometry
  * @param track_generator an optional pointer to the trackgenerator
  */
-ThreadPrivateSolver::ThreadPrivateSolver(Geometry* geom, 
+ThreadPrivateSolver::ThreadPrivateSolver(Geometry* geometry, 
 					 TrackGenerator* track_generator) :
-  CPUSolver(geom, track_generator) {
+  CPUSolver(geometry, track_generator) {
 
     _thread_flux = NULL;
 }
@@ -22,7 +22,13 @@ ThreadPrivateSolver::ThreadPrivateSolver(Geometry* geom,
  * @brief Destructor calls Solver subclass destructor to deletes arrays
  *        for fluxes and sources.
  */
-ThreadPrivateSolver::~ThreadPrivateSolver() { }
+ThreadPrivateSolver::~ThreadPrivateSolver() { 
+
+    if (_thread_flux != NULL) {
+        delete [] _thread_flux;
+	_thread_flux = NULL;
+    }
+}
 
 
 /**
@@ -64,13 +70,13 @@ void ThreadPrivateSolver::initializeFluxArrays() {
 void ThreadPrivateSolver::flattenFSRFluxes(FP_PRECISION value) {
 
     CPUSolver::flattenFSRFluxes(value);
-    
+
     /* Flatten the thread private flat source region scalar flux array */
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(guided)
     for (int tid=0; tid < _num_threads; tid++) {
         for (int r=0; r < _num_FSRs; r++) {
 	    for (int e=0; e < _num_groups; e++) {
-	      _thread_flux(tid,r,e) = 0.0;
+	        _thread_flux(tid,r,e) = 0.0;
 	    }
         }
     }
@@ -93,6 +99,7 @@ void ThreadPrivateSolver::transportSweep() {
     Track* curr_track;
     int num_segments;
     segment* curr_segment;    
+    segment* segments;
     FP_PRECISION* track_flux;
 
     log_printf(DEBUG, "Transport sweep with %d OpenMP threads", _num_threads);
@@ -110,7 +117,7 @@ void ThreadPrivateSolver::transportSweep() {
 	
 	/* Loop over each thread within this azimuthal angle halfspace */
         #pragma omp parallel for private(tid, fsr_id, curr_track, \
-          num_segments,	curr_segment, track_flux)
+	  num_segments, segments, curr_segment, track_flux) schedule(guided)
 	for (int track_id=min; track_id < max; track_id++) {
 
 	    tid = omp_get_thread_num();
@@ -118,11 +125,12 @@ void ThreadPrivateSolver::transportSweep() {
 	    /* Initialize local pointers to important data structures */	
 	    curr_track = _tracks[track_id];
 	    num_segments = curr_track->getNumSegments();
+	    segments = curr_track->getSegments();
 	    track_flux = &_boundary_flux(track_id,0,0,0);
 
 	    /* Loop over each segment in forward direction */
 	    for (int s=0; s < num_segments; s++) {
-	        curr_segment = curr_track->getSegment(s);
+	        curr_segment = &segments[s];
 		fsr_id = curr_segment->_region_id;
 		scalarFluxTally(curr_segment, track_flux, 
 	                        &_thread_flux(tid,fsr_id,0));
@@ -135,7 +143,7 @@ void ThreadPrivateSolver::transportSweep() {
 	    track_flux += _polar_times_groups;
 	    
 	    for (int s=num_segments-1; s > -1; s--) {
-	        curr_segment = curr_track->getSegment(s);
+	        curr_segment = &segments[s];
 		fsr_id = curr_segment->_region_id;
 		scalarFluxTally(curr_segment, track_flux, 
 	                        &_thread_flux(tid,fsr_id,0));
@@ -163,24 +171,25 @@ void ThreadPrivateSolver::transportSweep() {
  * @param fsr_flux a pointer to the temporary flat source region flux buffer
  */
 void ThreadPrivateSolver::scalarFluxTally(segment* curr_segment, 
-	                           FP_PRECISION* track_flux,
-	                           FP_PRECISION* fsr_flux){
+					  FP_PRECISION* track_flux,
+					  FP_PRECISION* fsr_flux){
 
     int tid = omp_get_thread_num();
     int fsr_id = curr_segment->_region_id;
+    FP_PRECISION length = curr_segment->_length;
+    double* sigma_t = curr_segment->_material->getSigmaT();
 
     /* The average flux along this segment in the flat source region */
     FP_PRECISION psibar;
-
-    FP_PRECISION* exponentials = &_exponentials[tid * _polar_times_groups];
-    computeExponentials(curr_segment, exponentials);
+    FP_PRECISION exponential;
 
     /* Loop over energy groups */
-    for (int p=0; p < _num_polar; p++){
+    for (int e=0; e < _num_groups; e++) {
 
 	/* Loop over polar angles */
-    for (int e=0; e < _num_groups; e++) {
-            psibar = (track_flux(p,e) - _ratios(fsr_id,e)) * exponentials(p,e);
+        for (int p=0; p < _num_polar; p++){
+            exponential = computeExponential(sigma_t[e], length, p);
+            psibar = (track_flux(p,e) - _reduced_source(fsr_id,e)) * exponential;
 	    fsr_flux[e] += psibar * _polar_weights[p];
 	    track_flux(p,e) -= psibar;
 	}

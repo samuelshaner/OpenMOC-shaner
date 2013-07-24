@@ -1,49 +1,31 @@
-import numpy
-from openmoc.intel.double import *
+from openmoc import *
 import openmoc.log as log
+import openmoc.materialize as materialize
 
 
 ###############################################################################
 #######################   Main Simulation Parameters   ########################
 ###############################################################################
 
-num_threads = 1
-track_spacing = 0.01
-num_azim = 256
-tolerance = 1E-3
-max_iters = 1000
-gridsize = 500
+num_threads = options.num_omp_threads
+track_spacing = options.track_spacing
+num_azim = options.num_azim
+tolerance = options.tolerance
+max_iters = options.max_iters
 
 log.setLogLevel('NORMAL')
-
-log.py_printf('TITLE', 'Simulating HW3 from Fall 2010 22.212...')
 
 
 ###############################################################################
 ###########################   Creating Materials   ############################
 ###############################################################################
 
-log.py_printf('NORMAL', 'Creating materials...')
+log.py_printf('NORMAL', 'Importing materials data from Python...')
 
-fuel = Material(1)
-moderator = Material(2)
+materials = materialize.materialize('../c5g7-materials.py')
 
-fuel.setNumEnergyGroups(1)
-moderator.setNumEnergyGroups(1)
-
-fuel.setSigmaA(numpy.array([0.069389522]))
-fuel.setSigmaT(numpy.array([0.452648699]))
-fuel.setSigmaF(numpy.array([0.0414198575]))
-fuel.setNuSigmaF(numpy.array([0.0994076580]))
-fuel.setSigmaS(numpy.array([0.38259177]))
-fuel.setChi(numpy.array([1.0]))
-
-moderator.setSigmaA(numpy.array([0.003751099]))
-moderator.setSigmaT(numpy.array([0.841545641]))
-moderator.setSigmaF(numpy.array([0.0]))
-moderator.setNuSigmaF(numpy.array([0.0]))
-moderator.setSigmaS(numpy.array([0.837794542]))
-moderator.setChi(numpy.array([1.0]))
+uo2_id = materials['UO2'].getId()
+water_id = materials['Water'].getId()
 
 
 ###############################################################################
@@ -52,16 +34,16 @@ moderator.setChi(numpy.array([1.0]))
 
 log.py_printf('NORMAL', 'Creating surfaces...')
 
-circle = Circle(x=0.0, y=0.0, radius=0.4)
-left = XPlane(x=-0.635)
-right = XPlane(x=0.635)
-top = YPlane(y=0.635)
-bottom = YPlane(y=-0.635)
-
-left.setBoundaryType(REFLECTIVE)
-right.setBoundaryType(REFLECTIVE)
-top.setBoundaryType(REFLECTIVE)
-bottom.setBoundaryType(REFLECTIVE)
+circles = []
+planes = []
+planes.append(XPlane(x=-2.0))
+planes.append(XPlane(x=2.0))
+planes.append(YPlane(y=-2.0))
+planes.append(YPlane(y=2.0))
+circles.append(Circle(x=0.0, y=0.0, radius=0.4))
+circles.append(Circle(x=0.0, y=0.0, radius=0.3))
+circles.append(Circle(x=0.0, y=0.0, radius=0.2))
+for plane in planes: plane.setBoundaryType(REFLECTIVE)
 
 
 ###############################################################################
@@ -71,26 +53,41 @@ bottom.setBoundaryType(REFLECTIVE)
 log.py_printf('NORMAL', 'Creating cells...')
 
 cells = []
-cells.append(CellBasic(universe=1, material=1))
-cells.append(CellBasic(universe=1, material=2))
-cells.append(CellFill(universe=0, universe_fill=2))
+cells.append(CellBasic(universe=1, material=uo2_id))
+cells.append(CellBasic(universe=1, material=water_id))
+cells.append(CellBasic(universe=2, material=uo2_id))
+cells.append(CellBasic(universe=2, material=water_id))
+cells.append(CellBasic(universe=3, material=uo2_id))
+cells.append(CellBasic(universe=3, material=water_id))
+cells.append(CellFill(universe=5, universe_fill=4))
+cells.append(CellFill(universe=0, universe_fill=6))
 
-cells[0].addSurface(halfspace=-1, surface=circle)
-cells[1].addSurface(halfspace=+1, surface=circle)
-cells[2].addSurface(halfspace=+1, surface=left)
-cells[2].addSurface(halfspace=-1, surface=right)
-cells[2].addSurface(halfspace=+1, surface=bottom)
-cells[2].addSurface(halfspace=-1, surface=top)
+cells[0].addSurface(halfspace=-1, surface=circles[0])
+cells[1].addSurface(halfspace=+1, surface=circles[0])
+cells[2].addSurface(halfspace=-1, surface=circles[1])
+cells[3].addSurface(halfspace=+1, surface=circles[1])
+cells[4].addSurface(halfspace=-1, surface=circles[2])
+cells[5].addSurface(halfspace=+1, surface=circles[2])
+
+cells[7].addSurface(halfspace=+1, surface=planes[0])
+cells[7].addSurface(halfspace=-1, surface=planes[1])
+cells[7].addSurface(halfspace=+1, surface=planes[2])
+cells[7].addSurface(halfspace=-1, surface=planes[3])
 
 
 ###############################################################################
 ###########################   Creating Lattices   #############################
 ###############################################################################
 
-log.py_printf('NORMAL', 'Creating simple pin cell lattice...')
+log.py_printf('NORMAL', 'Creating 16 x 16 lattice...')
 
-lattice = Lattice(id=2, width_x=1.27, width_y=1.27)
-lattice.setLatticeCells([[1]])
+# 2x2 assembly
+assembly = Lattice(id=4, width_x=1.0, width_y=1.0)
+assembly.setLatticeCells([[1, 2], [1, 3]])
+
+# 2x2 core
+core = Lattice(id=6, width_x=2.0, width_y=2.0)
+core.setLatticeCells([[5, 5], [5, 5]])
 
 
 ###############################################################################
@@ -100,12 +97,10 @@ lattice.setLatticeCells([[1]])
 log.py_printf('NORMAL', 'Creating geometry...')
 
 geometry = Geometry()
-geometry.addMaterial(fuel)
-geometry.addMaterial(moderator)
-geometry.addCell(cells[0])
-geometry.addCell(cells[1])
-geometry.addCell(cells[2])
-geometry.addLattice(lattice)
+for material in materials.values(): geometry.addMaterial(material)
+for cell in cells: geometry.addCell(cell)
+geometry.addLattice(assembly)
+geometry.addLattice(core)
 
 geometry.initializeFlatSourceRegions()
 
@@ -124,8 +119,10 @@ track_generator.generateTracks()
 ###########################   Running a Simulation   ##########################
 ###############################################################################
 
-solver = VectorizedSolver(geometry, track_generator)
+solver = ThreadPrivateSolver(geometry, track_generator)
 solver.setNumThreads(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)
 solver.printTimerReport()
+
+log.py_printf('TITLE', 'Finished')

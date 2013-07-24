@@ -9,13 +9,12 @@ import openmoc.cuda as cuda
 #######################   Main Simulation Parameters   ########################
 ###############################################################################
 
-num_blocks = 64
-num_threads = 64
-track_spacing = 0.1
-num_azim = 4
-tolerance = 1E-4
-max_iters = 1000
-gridsize = 500
+num_blocks = options.num_thread_blocks
+num_threads = options.num_gpu_threads
+track_spacing = options.track_spacing
+num_azim = options.num_azim
+tolerance = options.tolerance
+max_iters = options.max_iters
 
 log.setLogLevel('NORMAL')
 
@@ -318,18 +317,12 @@ lattices[-1].setLatticeCells([[10, 11, 15],
 
 log.py_printf('NORMAL', 'Creating geometry...')
 
-Timer.startTimer()
-
 geometry = Geometry()
 for material in materials.values(): geometry.addMaterial(material)
 for cell in cells: geometry.addCell(cell)
 for lattice in lattices: geometry.addLattice(lattice)
 
 geometry.initializeFlatSourceRegions()
-
-Timer.stopTimer()
-Timer.recordSplit('Iniitilializing the geometry')
-Timer.resetTimer()
 
 
 ###############################################################################
@@ -338,31 +331,20 @@ Timer.resetTimer()
 
 log.py_printf('NORMAL', 'Initializing the track generator...')
 
-Timer.startTimer()
-
 track_generator = TrackGenerator(geometry, num_azim, track_spacing)
 track_generator.generateTracks()
-
-Timer.stopTimer()
-Timer.recordSplit('Ray tracing across the geometry')
-Timer.resetTimer()
 
 
 ###############################################################################
 ###########################   Running a Simulation   ##########################
 ###############################################################################
 
-Timer.startTimer()
-
 solver = cuda.GPUSolver(geometry, track_generator)
 solver.setNumThreadBlocks(num_blocks)
 solver.setNumThreadsPerBlock(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)
-
-Timer.stopTimer()
-Timer.recordSplit('Converging the source on the GPU')
-Timer.resetTimer()
+solver.printTimerReport()
 
 
 ###############################################################################
@@ -371,17 +353,10 @@ Timer.resetTimer()
 
 log.py_printf('NORMAL', 'Plotting data...')
 
-Timer.startTimer()
-
 #plotter.plotTracks(track_generator)
-#plotter.plotMaterials(geometry, gridsize)
-#plotter.plotCells(geometry, gridsize)
-#plotter.plotFlatSourceRegions(geometry, gridsize)
+#plotter.plotMaterials(geometry, gridsize=500)
+#plotter.plotCells(geometry, gridsize=500)
+#plotter.plotFlatSourceRegions(geometry, gridsize=500)
 #plotter.plotFluxes(geometry, solver, energy_groups=[1,2,3,4,5,6,7])
-
-Timer.stopTimer()
-Timer.recordSplit('Generating visualizations')
-Timer.resetTimer()
-Timer.printSplits()
 
 log.py_printf('TITLE', 'Finished')

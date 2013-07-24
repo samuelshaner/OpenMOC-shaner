@@ -1,250 +1,453 @@
-1###############################################################################
-#                                 User Options
-###############################################################################
+import sys
+from distutils.extension import Extension
+from distutils.util import get_platform
 
-# Name of the Python package to be created
-package_name = 'openmoc'
+def get_openmoc_object_name():
+    """Returns the name of the main openmoc shared library object"""
 
-# Supported C++ compilers: 'gcc', 'icpc', 'all'
-cpp_compilers = ['gcc']
+    # For Python 2.X.X
+    if (sys.version_info[0] == 2):
+        filename = '_openmoc.so'
 
-# Only supports GCC as the default compiler right now
-default_cc = 'gcc'
+    # For Python 3.X.X
+    # NOTE: Python 3 distributions are not yet working with SWIG, but this
+    # is a stub for the future
+    elif (sys.version_info[0] == 3):
+        filename = '_openmoc.cpython-{version[0]}{version[1]}mu.so'
+        filename = filename.format(version=sys.version_info)
 
-# Supported floating point precision levels: 'single', 'double', 'all'
-fp_precision = ['all']
-
-default_fp = 'single'
-
-# Compile using ccache (most relevant for developers)
-with_ccache = True
-
-# Compile with debug flags
-debug_mode = False
-
-# Use CUDA set to True or False
-with_cuda = False
-
-# The vector length used for the VectorizedSolver class. This will used
-# SIMD vector instructions. The number of energy groups will be fit to
-# a multiple of this value
-vector_length = 8
-
-# The vector alignment used in the VectorizedSolver class when allocating
-# aligned data structures 
-vector_alignment = 16
+    return filename
 
 
-###############################################################################
-#                                 Source Code
-###############################################################################
+def get_shared_object_path():
+    """Returns the name of the distutils build directory"""
+    
+    # For Python 2.X.X
+    if (sys.version_info[0] == 2):
+        directory = 'build/lib.{platform}-{version[0]}.{version[1]}'
+        directory = directory.format(platform=get_platform(), 
+                                     version=sys.version_info)
 
-sources = {}
+    # For Python 3.X.X
+    # NOTE: Python 3 distributions are not yet working with SWIG, but this is
+    # a stub for the future
+    elif (sys.version_info[0] == 3):
+        directory = 'build/lib'
 
-sources['gcc'] = ['openmoc/openmoc.i',
-                  'src/Cell.cpp',
-                  'src/Geometry.cpp',
-                  'src/LocalCoords.cpp',
-                  'src/log.cpp',
-                  'src/Material.cpp',
-                  'src/Point.cpp',
-                  'src/Quadrature.cpp',
-                  'src/Solver.cpp',
-                  'src/CPUSolver.cpp',
-                  'src/ThreadPrivateSolver.cpp',
-                  'src/Surface.cpp',
-                  'src/Timer.cpp',
-                  'src/Track.cpp',
-                  'src/TrackGenerator.cpp',
-                  'src/Universe.cpp',
-                  'src/PapiProfiler.cpp']
-
-sources['icpc'] = ['openmoc/openmoc.i',
-                  'src/Cell.cpp',
-                  'src/Geometry.cpp',
-                  'src/LocalCoords.cpp',
-                  'src/log.cpp',
-                  'src/Material.cpp',
-                  'src/Point.cpp',
-                  'src/Quadrature.cpp',
-                  'src/Solver.cpp',
-                  'src/CPUSolver.cpp',
-                  'src/ThreadPrivateSolver.cpp',
-                  'src/VectorizedSolver.cpp',
-                  'src/Surface.cpp',
-                  'src/Timer.cpp',
-                  'src/Track.cpp',
-                  'src/TrackGenerator.cpp',
-                  'src/Universe.cpp',
-                  'src/PapiProfiler.cpp']
-
-sources['nvcc'] = ['openmoc/cuda/openmoc_cuda.i',
-                   'src/dev/gpu/clone.cu',
-                   'src/dev/gpu/GPUQuery.cu',
-                   'src/dev/gpu/GPUSolver.cu']
+    return directory
 
 
-
-###############################################################################
-#                                Compiler Paths
-###############################################################################
-
-path_to_gcc = '/usr/'
-path_to_nvcc = '/usr/local/cuda/'
-path_to_icpc = '/usr/intel/composer_xe_2013.1.117/'
-
+#path_to_bgxlc = '/soft/compilers/ibmcmp-feb2013/vac/bg/12.1/'
 # Compiler binaries
-gcc = path_to_gcc + 'bin/gcc'
-icpc = path_to_icpc + 'bin/intel64/icpc'
-nvcc = path_to_nvcc + 'bin/nvcc'
+#bgxlc = path_to_bgxlc + 'bin/bgxlc'
+
+def get_openmoc():
+    """Returns the path and name of the main shared library object"""
+
+    return get_shared_object_path() + '/' + get_openmoc_object_name()
+
+
+class configuration:
+    """User-defined build configuration options for OpenMOC
+    
+    Configuration options may be set using compile time flags. To view a 
+    list of these options, run 'python setup.py install --help' in the 
+    console. The default configuration options are shown below and should 
+    only be revised by developers familiar with the code and its configuration 
+    management system.
+    """
+
+    ###########################################################################
+    #                               User Options
+    ###########################################################################
+
+    # Only supports GCC as the default compiler right now ??????
+    # Default C++ compiler for the main openmoc module is GCC
+    cc = 'gcc'
+
+    # Default floating point for the main openmoc module is single precision
+    fp = 'single'
+
+    # Supported C++ compilers: 'gcc', 'icpc', 'bgxlc', 'nvcc', 'all'
+    cpp_compilers = []
+
+    # Supported floating point precision levels: 'single', 'double', 'all'
+    fp_precision = []
+
+    # Compile using ccache (for developers needing fast recompilation)
+    with_ccache = False
+
+    # Compile code with debug symbols (ie, -g)
+    debug_mode = False
+
+    # Build the openmoc.cuda and/or openmoc.cuda/single and/or 
+    # openmoc.cuda.double modules (depending on what precision levels 
+    # are set for fp_precision)
+    with_cuda = False
+
+    # Compile with PAPI instrumentation
+    with_papi = False
+
+    # Compile with NumPy typemaps and the C API to allow users to pass NumPy
+    # arrays to/from the C++ source code
+    with_numpy = True
+
+    # The vector length used for the VectorizedSolver class. This will used
+    # as a hint for the Intel compiler to issue SIMD (ie, SSE, AVX, etc) vector 
+    # instructions. This is accomplished by adding "dummy" energy groups such 
+    # that the number of energy groups is be fit too a multiple of this 
+    # vector_length, and restructuring the innermost loops in the solver to 
+    # loop from 0 to the vector length
+    vector_length = 8
+
+    # The vector alignment used in the VectorizedSolver class when allocating
+    # aligned data structures using _mm_malloc and _mm_free
+    vector_alignment = 16
+
+    # List of C/C++/CUDA distutils.extension objects which are created based 
+    # on which flags are specified at compile time.
+    extensions = []
+
+    # List of the packages to install - only openmoc is guaranteed to be built
+    # while the others will be built based on which flags are specified
+    # at compile time
+    packages = ['openmoc', 'openmoc.intel', 'openmoc.gnu', 
+                'openmoc.cuda', 'openmoc.intel.double', 
+                'openmoc.intel.single', 'openmoc.gnu.double', 
+                'openmoc.gnu.single', 'openmoc.cuda.double', 
+                'openmoc.cuda.single']
 
 
 
-###############################################################################
-#                                Compiler Flags
-###############################################################################
+    ###########################################################################
+    #                                 Source Code
+    ###########################################################################
 
-compiler_flags = {}
+    # Dictionary of source code files to compile for each extension module
+    sources = {}
 
-compiler_flags['gcc'] = ['-c', 
-                         '-O3', 
-                         '-fopenmp', 
-                         '-std=c++0x', 
-                         '-fpic',
-                         '-L/usr/local/lib']
+    sources['gcc'] = ['openmoc/openmoc.i',
+                      'src/Cell.cpp',
+                      'src/Geometry.cpp',
+                      'src/LocalCoords.cpp',
+                      'src/log.cpp',
+                      'src/Material.cpp',
+                      'src/Point.cpp',
+                      'src/Quadrature.cpp',
+                      'src/Solver.cpp',
+                      'src/CPUSolver.cpp',
+                      'src/ThreadPrivateSolver.cpp',
+                      'src/Surface.cpp',
+                      'src/Timer.cpp',
+                      'src/Track.cpp',
+                      'src/TrackGenerator.cpp',
+                      'src/Universe.cpp']
 
-compiler_flags['icpc'] =['-c', 
-                         '-O3', 
-                         '--ccache-skip',
-                         '-openmp', 
-                         '--ccache-skip',
-                         '-xhost', 
-                         '-std=c++0x', 
-                         '-fpic',
-                         '--ccache-skip',
-                         '-openmp-report', 
-                         '-vec-report']
+    sources['icpc'] = ['openmoc/openmoc.i',
+                       'src/Cell.cpp',
+                       'src/Geometry.cpp',
+                       'src/LocalCoords.cpp',
+                       'src/log.cpp',
+                       'src/Material.cpp',
+                       'src/Point.cpp',
+                       'src/Quadrature.cpp',
+                       'src/Solver.cpp',
+                       'src/CPUSolver.cpp',
+                       'src/ThreadPrivateSolver.cpp',
+                       'src/VectorizedSolver.cpp',
+                       'src/VectorizedPrivateSolver.cpp',
+                       'src/Surface.cpp',
+                       'src/Timer.cpp',
+                       'src/Track.cpp',
+                       'src/TrackGenerator.cpp',
+                       'src/Universe.cpp']
 
-compiler_flags['nvcc'] =  ['-c', 
-                           '-O3',
-                           '--compiler-options', 
-                           '-fpic',
-                           '-gencode=arch=compute_20,code=sm_20',
-                           '-gencode=arch=compute_30,code=sm_30']
+    sources['bgxlc'] = ['openmoc/openmoc.i',
+                        'src/Cell.cpp',
+                        'src/Geometry.cpp',
+                        'src/LocalCoords.cpp',
+                        'src/log.cpp',
+                        'src/Material.cpp',
+                        'src/Point.cpp',
+                        'src/Quadrature.cpp',
+                        'src/Solver.cpp',
+                        'src/CPUSolver.cpp',
+                        'src/ThreadPrivateSolver.cpp',
+                        'src/Surface.cpp',
+                        'src/Timer.cpp',
+                        'src/Track.cpp',
+                        'src/TrackGenerator.cpp',
+                        'src/Universe.cpp']
 
-
-###############################################################################
-#                                 Linker Flags
-###############################################################################
-
-linker_flags = {}
-
-linker_flags['gcc'] = ['-lstdc++', 
-                       '-lgomp', 
-                       '-fopenmp',
-                       '-shared', 
-                       '-ldl',
-                       '-lpthread',
-                       '-lm',
-                       '-lpapi',
-                       '-Wl,-soname,_openmoc.so']
-
-linker_flags['icpc'] = ['-lstdc++', 
-                        '-openmp', 
-                        '-liomp5', 
-                        '-lpthread', 
-                        '-lirc', 
-                        '-limf', 
-                        '-lrt', 
-                        '-shared',
-                        '-lmkl_rt',
-                        '-lm',
-                        '-Xlinker',
-                        '-soname=_openmoc.so']
-
-linker_flags['nvcc'] = ['-shared', 
-                        'build/lib.linux-x86_64-2.7/_openmoc.so']
-
-
-
-###############################################################################
-#                               Shared Libraries
-###############################################################################
-
-shared_libraries = {}
-
-shared_libraries['gcc'] = []
-shared_libraries['icpc'] = []
-shared_libraries['nvcc'] = ['cudart']
+    sources['nvcc'] = ['openmoc/cuda/openmoc_cuda.i',
+                       'src/dev/gpu/clone.cu',
+                       'src/dev/gpu/GPUQuery.cu',
+                       'src/dev/gpu/GPUSolver.cu']
 
 
-###############################################################################
-#                              Library Directories
-###############################################################################
 
-library_directories = {}
+    ###########################################################################
+    #                                Compiler Flags
+    ###########################################################################
 
-library_directories['gcc'] = [path_to_icpc + 'mkl/lib/intel64']
-library_directories['icpc'] = [path_to_icpc + 'compiler/lib/intel64']
-library_directories['nvcc'] = [path_to_nvcc + 'lib64']
+    # A dictionary of the compiler flags to use for each compiler type
+    compiler_flags = {}
 
-
-###############################################################################
-#                              Include Directories
-###############################################################################
-
-include_directories = {}
-
-include_directories['gcc'] = []
-include_directories['icpc'] =[path_to_icpc + 'compiler/include']
-include_directories['nvcc'] = [path_to_nvcc + 'include']
+    compiler_flags['gcc'] = ['-c', '-O3', '-fopenmp', '-std=c++0x', '-fpic']
+    compiler_flags['icpc'] =['-c', '-O3', '--ccache-skip', '-openmp', 
+                             '-xhost', '-std=c++0x', '-fpic', '--ccache-skip', 
+                             '-openmp-report', '-vec-report']
+    compiler_flags['bgxlc'] = ['-c', '-O1', '-qsmp=omp', '-qarch=qp', 
+                               '-qreport', '-qnoipa', '-qpic']
+    compiler_flags['nvcc'] =  ['-c', '-O3', '--compiler-options', '-fpic',
+                               '-gencode=arch=compute_20,code=sm_20',
+                               '-gencode=arch=compute_30,code=sm_30']
+    
 
 
-###############################################################################
-#                                 SWIG Flags
-###############################################################################
+    ###########################################################################
+    #                                 Linker Flags
+    ###########################################################################
 
-swig_flags = ['-c++', '-keyword']
+    # A dictionary of the linker flags to use for each compiler type
+    linker_flags = {}
+
+    linker_flags['gcc'] = ['-fopenmp', '-shared', 
+                           '-Wl,-soname,' + get_openmoc_object_name()]
+    linker_flags['icpc'] = [ '-openmp', '-shared', 
+                             '-Xlinker', '-soname=' + get_openmoc_object_name()]
+    linker_flags['bgxlc'] = ['-qmkshrobj', '-shared', '-R/usr/lib64',
+                             '-R/soft/compilers/ibmcmp-feb2013/vac/bg/12.1/bglib64',
+                             '-R/soft/compilers/ibmcmp-feb2013/lib64/bg',
+                             '-Wl,-soname,' + get_openmoc_object_name()]
+    linker_flags['nvcc'] = ['-shared', get_openmoc()]
 
 
-###############################################################################
-#                                  Macros
-###############################################################################
 
-macros = {}
-macros['gcc'] = {}
-macros['icpc'] = {}
-macros['nvcc'] = {}
+    ###########################################################################
+    #                               Shared Libraries
+    ###########################################################################
 
-macros['gcc']['single']= [('FP_PRECISION', 'float'), 
-                          ('SINGLE', None),
-                          ('GNU', None),
-                          ('VEC_LENGTH', vector_length),
-                          ('VEC_ALIGNMENT', vector_alignment)]
-macros['icpc']['single']= [('FP_PRECISION', 'float'), 
-                           ('SINGLE', None),
-                           ('INTEL', None),
-                           ('MKL_ILP64', None),
-                           ('VEC_LENGTH', vector_length),
-                           ('VEC_ALIGNMENT', vector_alignment)]
+    # A dictionary of the shared libraries to use for each compiler type
+    shared_libraries = {}
 
-macros['gcc']['double'] = [('FP_PRECISION', 'double'), 
-                           ('DOUBLE', None),
-                           ('GNU', None),
-                           ('VEC_LENGTH', vector_length),
-                           ('VEC_ALIGNMENT', vector_alignment)]
-macros['icpc']['double'] = [('FP_PRECISION', 'double'), 
-                            ('DOUBLE', None),
-                            ('INTEL', None),
-                            ('MKL_ILP64', None),
-                            ('VEC_LENGTH', vector_length),
-                            ('VEC_ALIGNMENT', vector_alignment)]
+    shared_libraries['gcc'] = ['stdc++', 'gomp', 'dl','pthread', 'm']
+    shared_libraries['icpc'] = ['stdc++', 'iomp5', 'pthread', 'irc', 
+                                'imf','rt', 'mkl_rt','m',]
+    shared_libraries['nvcc'] = ['cudart']
+    shared_libraries['bgxlc'] = ['stdc++', 'pthread', 'm', 'gomp', 'xlsmp']
 
-macros['nvcc']['single'] = [('FP_PRECISION', 'float'), 
-                            ('SINGLE', None),
-                            ('CUDA', None),
-                            ('CCACHE_CC', 'nvcc')]
-macros['nvcc']['double'] = [('FP_PRECISION', 'double'), 
-                            ('DOUBLE', None),
-                            ('CUDA', None),
-                            ('CCACHE_CC', 'nvcc')]
+
+
+    ###########################################################################
+    #                              Library Directories
+    ###########################################################################
+
+    # A dictionary of the library directories to use for each compiler type
+    # if not set in the LD_LIBRARY_PATH environment variable
+    library_directories = {}
+
+    library_directories['gcc'] = []
+    library_directories['icpc'] = []
+    library_directories['bgxlc'] = ['/usr/lib64']
+    library_directories['nvcc'] = ['/usr/local/cuda/lib64']
+
+
+
+    ###########################################################################
+    #                              Include Directories
+    ###########################################################################
+
+    # A dictionary of the include directories to use for each compiler type
+    # for header files not found from paths set in the user's environment
+    include_directories = {}
+
+    include_directories['gcc'] = []
+    include_directories['icpc'] =[]
+    include_directories['bgxlc'] = ['/usr/lib64/python2.6/site-packages/numpy/core/include']
+    include_directories['nvcc'] = ['/usr/local/cuda/include']
+
+
+
+    ###########################################################################
+    #                                 SWIG Flags
+    ###########################################################################
+
+    # A list of the flags for SWIG
+    swig_flags = ['-c++', '-keyword']
+
+
+    ###########################################################################
+    #                                  Macros
+    ###########################################################################
+
+    # A dictionary of the macros to set at compile time for each compiler type
+    # and floating point precisin level
+    macros = {}
+
+    macros['gcc'] = {}
+    macros['icpc'] = {}
+    macros['bgxlc'] = {}
+    macros['nvcc'] = {}
+
+    macros['gcc']['single']= [('FP_PRECISION', 'float'), 
+                              ('SINGLE', None),
+                              ('GNU', None),
+                              ('VEC_LENGTH', vector_length),
+                              ('VEC_ALIGNMENT', vector_alignment)]
+    
+    macros['icpc']['single']= [('FP_PRECISION', 'float'), 
+                               ('SINGLE', None),
+                               ('INTEL', None),
+                               ('MKL_ILP64', None),
+                               ('VEC_LENGTH', vector_length),
+                               ('VEC_ALIGNMENT', vector_alignment)]
+
+    macros['bgxlc']['single'] = [('FP_PRECISION', 'float'),
+                                 ('SINGLE', None),
+                                 ('BGXLC', None),
+                                 ('VEC_LENGTH', vector_length),
+                                 ('VEC_ALIGNMENT', vector_alignment),
+                                 ('CCACHE_CC', 'bgxlc++')]
+
+    macros['nvcc']['single'] = [('FP_PRECISION', 'float'), 
+                                ('SINGLE', None),
+                                ('CUDA', None),
+                                ('CCACHE_CC', 'nvcc')]
+    
+    macros['gcc']['double'] = [('FP_PRECISION', 'double'), 
+                               ('DOUBLE', None),
+                               ('GNU', None),
+                               ('VEC_LENGTH', vector_length),
+                               ('VEC_ALIGNMENT', vector_alignment)]
+   
+    macros['icpc']['double'] = [('FP_PRECISION', 'double'), 
+                                ('DOUBLE', None),
+                                ('INTEL', None),
+                                ('MKL_ILP64', None),
+                                ('VEC_LENGTH', vector_length),
+                                ('VEC_ALIGNMENT', vector_alignment)]
+
+    macros['bgxlc']['double'] = [('FP_PRECISION', 'double'),
+                                 ('DOUBLE', None),
+                                 ('BGXLC', None),
+                                 ('VEC_LENGTH', vector_length),
+                                 ('VEC_ALIGNMENT', vector_alignment),
+                                 ('CCACHE_CC', 'bgxlc++')]
+
+    macros['nvcc']['double'] = [('FP_PRECISION', 'double'), 
+                                ('DOUBLE', None),
+                                ('CUDA', None),
+                                ('CCACHE_CC', 'nvcc')]
+
+
+
+    def setup_extension_modules(self):
+        """Sets up the C/C++/CUDA extension modules for this distribution.
+        
+        Create list of extensions for Python modules within the openmoc 
+        Python package based on the user-defined flags defined at compile time.
+        """
+
+        # If the user selected 'all' compilers, enumerate them
+        if self.cpp_compilers == ['all']:
+            self.cpp_compilers = ['gcc', 'icpc', 'nvcc']
+
+        # If the user selected 'all' FP precision levels, enumerate them
+        if self.fp_precision == ['all']:
+            self.fp_precision = ['double', 'single']
+
+        # If the user wishes to compile using debug mode, append the debugging
+        # flag to all lists of compiler flags for all distribution types 
+        if self.debug_mode:
+            for k in self.compiler_flags:
+                self.compiler_flags[k].append('-g')
+
+        # If the user passed in the --no-numpy flag, tell SWIG not to embed 
+        # NumPy typemaps in the source code
+        if not self.with_numpy:
+            self.swig_flags += ['-DNO_NUMPY']
+        
+        # The main openmoc extension (defaults are gcc and single precision)
+        self.extensions.append(
+            Extension(name = '_openmoc', 
+                      sources = self.sources[self.cc], 
+                      library_dirs = self.library_directories[self.cc], 
+                      libraries = self.shared_libraries[self.cc],
+                      extra_link_args = self.linker_flags[self.cc], 
+                      include_dirs = self.include_directories[self.cc],
+                      define_macros = self.macros[self.cc][self.fp],
+                      swig_opts = self.swig_flags + ['-D' + self.cc.upper()]))
+
+        # Remove the main SWIG configuration file for builds of other extensions
+        # (ie, openmoc.gnu.*, openmoc.intel.*, etc) 
+        self.sources['gcc'].remove('openmoc/openmoc.i')
+        self.sources['icpc'].remove('openmoc/openmoc.i')
+         
+        # The openmoc.cuda extension if requested by the user at compile 
+        # time (--with-cuda)        
+        if self.with_cuda:
+            
+            self.cpp_compilers.append('nvcc')
+
+            self.extensions.append(
+                Extension(name = '_openmoc_cuda', 
+                          sources = self.sources['nvcc'], 
+                          library_dirs = self.library_directories['nvcc'], 
+                          libraries = self.shared_libraries['nvcc'],
+                          extra_link_args = self.linker_flags['nvcc'], 
+                          include_dirs = self.include_directories['nvcc'],
+                          define_macros = self.macros['nvcc'][self.fp],
+                          swig_opts = self.swig_flags  + ['-DNVCC'],
+                          export_symbols = ['init_openmoc']))
+        
+            # REmove the main SWIG configuration file for builds of other 
+            # extensions (ie, openmoc.cuda.single, openmoc.cuda.double)
+            self.sources['nvcc'].remove('openmoc/cuda/openmoc_cuda.i')
+            
+        # Loop over the compilers and floating point precision levels to create
+        # extension modules for each (ie, openmoc.intel.double, 
+        # openmoc.cuda.single, etc)
+        for fp in self.fp_precision:
+            for cc in self.cpp_compilers:
+
+                # Build the filename for the SWIG configuration file and the
+                # extension name depending on the compiler and floating 
+                # point precision
+
+                # For openmoc.cuda.* modules
+                if cc == 'nvcc':
+                    ext_name = '_openmoc_cuda_' + fp
+                    swig_interface_file = 'openmoc/cuda/' + fp
+                    swig_interface_file += '/openmoc_cuda_' + fp + '.i'
+                    self.sources['nvcc'].append(swig_interface_file)
+                    
+                # For openmoc.gnu.* modules
+                elif cc == 'gcc':
+                    ext_name = '_openmoc_gnu_' + fp
+                    swig_interface_file = 'openmoc/gnu/' + fp
+                    swig_interface_file += '/openmoc_gnu_' + fp + '.i'
+                    self.sources['gcc'].append(swig_interface_file)
+                    
+                # For openmoc.intel.* modules
+                elif cc == 'icpc':
+                    ext_name = '_openmoc_intel_' + fp
+                    swig_interface_file = 'openmoc/intel/' + fp
+                    swig_interface_file += '/openmoc_intel_' + fp + '.i'
+                    self.sources['icpc'].append(swig_interface_file)
+                    
+                # If an unsupported compiler, throw error
+                else:
+                    raise NameError('Compiler ' + str(cc) + ' is not supported')
+                
+                # Create the extension module and append it to the list of all
+                # extension modules
+                self.extensions.append(
+                    Extension(name = ext_name, 
+                              sources = self.sources[cc], 
+                              library_dirs = self.library_directories[cc], 
+                              libraries = self.shared_libraries[cc],
+                              extra_link_args = self.linker_flags[cc], 
+                              include_dirs = self.include_directories[cc],
+                              define_macros = self.macros[cc][fp],
+                              swig_opts = self.swig_flags + ['-D' + cc.upper()]))

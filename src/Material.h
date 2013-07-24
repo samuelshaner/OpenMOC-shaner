@@ -13,8 +13,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
-#include <mm_malloc.h>
 #include "log.h"
+#endif
+
+#ifndef ICPC
+#define _mm_free(array) free(array)
+#define _mm_malloc(size,alignment) malloc(size)
 #endif
 
 /** Error threshold for determining how close the sum of \f$ \Sigma_a \f$ 
@@ -91,13 +95,21 @@ public:
     bool isDataAligned();
     int getNumVectorGroups();
 
-    void setNumEnergyGroups(const int num_groups);    
-    void setSigmaT(double* sigma_t, int num_groups);
-    void setSigmaA(double* sigma_a, int num_groups);
-    void setSigmaS(double* sigma_s, int num_groups);
-    void setSigmaF(double* sigma_f, int num_groups);
-    void setNuSigmaF(double* nu_sigma_f, int num_groups);
-    void setChi(double* chi, int num_groups);
+    void setNumEnergyGroups(const int num_groups);
+    void setSigmaT(double* xs, int num_groups);
+    void setSigmaA(double* xs, int num_groups);
+    void setSigmaS(double* xs, int num_groups);
+    void setSigmaF(double* xs, int num_groups);
+    void setNuSigmaF(double* xs, int num_groups);
+    void setChi(double* xs, int num_groups);
+    
+    void setSigmaTByGroup(double xs, int group);
+    void setSigmaAByGroup(double xs, int group);
+    void setSigmaFByGroup(double xs, int group);
+    void setNuSigmaFByGroup(double xs, int group);
+    void setSigmaSByGroup(double xs, int group1, int group2);
+    void setChiByGroup(double xs, int group);
+
 
     void checkSigmaT();
     std::string toString();

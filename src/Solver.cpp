@@ -33,14 +33,17 @@ Solver::Solver(Geometry* geometry, TrackGenerator* track_generator) {
     _boundary_leakage = NULL;
 
     _scalar_flux = NULL;
-    _fission_source = NULL;
+    _fission_sources = NULL;
+    _scatter_sources = NULL;
     _source = NULL;
     _old_source = NULL;
-    _ratios = NULL;
+    _reduced_source = NULL;
+    _source_residuals = NULL;
 
     _FSRs_to_powers = NULL;
     _FSRs_to_pin_powers = NULL;
 
+    _interpolate_exponential = true;
     _prefactor_array = NULL;
 
     if (geometry != NULL)
@@ -94,8 +97,11 @@ Solver::~Solver() {
     if (_scalar_flux != NULL)
         delete [] _scalar_flux;
 
-    if (_fission_source != NULL)
-        delete [] _fission_source;
+    if (_fission_sources != NULL)
+        delete [] _fission_sources;
+
+    if (_scatter_sources != NULL)
+        delete [] _scatter_sources;
 
     if (_source != NULL)
         delete [] _source;
@@ -103,8 +109,11 @@ Solver::~Solver() {
     if (_old_source != NULL)
         delete [] _old_source;
 
-    if (_ratios != NULL)
-        delete [] _ratios;
+    if (_reduced_source != NULL)
+        delete [] _reduced_source;
+
+    if (_source_residuals != NULL)
+        delete [] _source_residuals;
 
     if (_FSRs_to_powers != NULL)
         delete [] _FSRs_to_powers;
@@ -246,7 +255,7 @@ void Solver::setTrackGenerator(TrackGenerator* track_generator) {
 /**
  * @brief Sets the type of polar angle quadrature set to use (ie, TABUCHI 
  *        or LEONARD).
- * @param type the polar angle quadrature type
+ * @param quadrature_type the polar angle quadrature type
  */
 void Solver::setPolarQuadratureType(quadratureType quadrature_type) {
     _quadrature_type = quadrature_type;
@@ -291,6 +300,24 @@ void Solver::setSourceConvergenceThreshold(FP_PRECISION source_thresh) {
 
 
 /**
+ * @brief Sets the solver to use linear interpolation to compute the exponential
+ *        in the transport equation
+ */
+void Solver::useExponentialInterpolation() {
+    _interpolate_exponential = true;
+}
+
+
+/**
+ * @brief Sets the solver to use the exponential intrinsic function to 
+ *        compute the exponential in the transport equation
+ */
+void Solver::useExponentialIntrinsic() {
+    _interpolate_exponential = false;
+}
+
+
+/**
  * @brief Checks that each flat source region has at least one segment within 
  *        it and if not, throws an exception and prints an error message.
  */
@@ -298,7 +325,8 @@ void Solver::checkTrackSpacing() {
 
     int* FSR_segment_tallies = new int[_num_FSRs];
     int num_segments;
-    segment* curr_segment;
+    segment* curr_segment; 
+    segment* segments;
     Cell* cell;
 
     /* Set each tally to zero to begin with */
@@ -312,9 +340,10 @@ void Solver::checkTrackSpacing() {
     for (int i=0; i < _tot_num_tracks; i++) {
      
         num_segments = _tracks[i]->getNumSegments();
+	segments = _tracks[i]->getSegments();
 
 	for (int s=0; s < num_segments; s++) {
-	    curr_segment = _tracks[i]->getSegment(s);
+	    curr_segment = &segments[s];
 	    FSR_segment_tallies[curr_segment->_region_id]++;
 	}
     }
@@ -396,31 +425,11 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
         log_printf(NORMAL, "Iteration %d: \tk_eff = %1.6f"
 		 "\tres = %1.3E", i, _k_eff, residual);
 
-	_timer->startTimer();
 	normalizeFluxes();
-	_timer->stopTimer();
-	_timer->recordSplit("Normalizing the flux");
-
-	_timer->startTimer();
 	residual = computeFSRSources();
-	_timer->stopTimer();
-	_timer->recordSplit("Computing FSR sources");
-
-
-	_timer->startTimer();
-	transportSweep();
-	_timer->stopTimer();
-	_timer->recordSplit("Transport sweep across the geometry");
-
-	_timer->startTimer();
+	transportSweep();	
 	addSourceToScalarFlux();
-	_timer->stopTimer();
-	_timer->recordSplit("Adding the source term to the flux");
-
-	_timer->startTimer();
 	computeKeff();
-	_timer->stopTimer();
-	_timer->recordSplit("Computing reaction rates and keff");
 
 	_num_iterations++;
 
@@ -447,11 +456,6 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
  *        code in the source convergence loop
  */
 void Solver::clearTimerSplits() {
-    _timer->clearSplit("Normalizing the flux");
-    _timer->clearSplit("Computing FSR sources");
-    _timer->clearSplit("Transport sweep across the geometry");
-    _timer->clearSplit("Adding the source term to the flux");
-    _timer->clearSplit("Computing reaction rates and keff");
     _timer->clearSplit("Total time to converge the source");
 }
 
@@ -463,7 +467,6 @@ void Solver::printTimerReport() {
 
     std::string msg_string;
     
-
     log_printf(TITLE, "TIMING REPORT");
 
     /* Get the total runtime */
@@ -491,9 +494,38 @@ void Solver::printTimerReport() {
     msg_string.resize(53, '.');
     log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), time_per_segment);
 
-    _timer->printSplits();
+    setSeparatorCharacter('-');
+    log_printf(SEPARATOR, "-");
 
-    log_printf(SEPARATOR, "*");
+    msg_string = "           # tracks          # segments          # FSRs";
+    log_printf(RESULT, "%s", msg_string.c_str());
+
+    int num_digits = (int) log10((double) _tot_num_tracks);
+    num_digits += (int) log10((double) num_segments);
+    num_digits += (int) log10((double) _num_FSRs);
+
+    num_digits = 67 - num_digits;
+    num_digits /= 4;
+
+    log_printf(SEPARATOR, "-");
+
+    std::stringstream msg;
+
+    for (int i=0; i < 4; i++) {
+        for (int j=0; j < num_digits; j++)
+	    msg << " ";
+	
+	if (i == 0)
+	    msg << _tot_num_tracks;
+	else if (i == 1)
+	    msg << num_segments;
+	else if (i == 2)
+	    msg << _num_FSRs;
+    }
+
+    log_printf(RESULT, "%s", msg.str().c_str());\
+
+    log_printf(SEPARATOR, "-");
 }
 
 /******* PAPI *******/
