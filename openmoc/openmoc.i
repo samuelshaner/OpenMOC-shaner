@@ -17,6 +17,7 @@
     #include "../src/Track.h" 
     #include "../src/TrackGenerator.h"
     #include "../src/Universe.h"
+    #include "../src/PapiProfiler.h"
 
     #define printf PySys_WriteStdout
 
@@ -92,6 +93,7 @@
 %include ../src/Track.h
 %include ../src/TrackGenerator.h
 %include ../src/Universe.h
+%include ../src/PapiProfiler.h
 
 #ifdef DOUBLE
 typedef double FP_PRECISION;

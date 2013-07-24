@@ -8,6 +8,11 @@
 #include <stdlib.h>
 #include "papi.h"
 #include "log.h"
+
+#define CHARBUF 128
+#define THR_REDUCE -1
+#define THR_SEPARATE -2
+
 #endif
 
 typedef struct _papiThreadSet{
@@ -22,13 +27,21 @@ class PapiProfiler {
 
 protected:
 
+	std::vector< std::vector<int> > _CodeSections;
+
+	/* Vector of the codes of Events to count */
 	std::vector<int> _EventCodes;
+
+	/* Vector of papiThreadSet structs which keep track of
+	   counts for each thread, of length _NUM_THREADS */	
 	std::vector<papiThreadSet> _thrset_arr;
+
+	int _num_codeSections;
 	int _num_threads;
 
 public:
 
-	PapiProfiler(int num_threads);
+	PapiProfiler(int num_threads, int num_codeSections);
 	~PapiProfiler();
 
 	int init();
@@ -36,7 +49,7 @@ public:
     int addEvent(char *event);
     int getNumEvents();
     int clearEvents();
-    void printEventCounts();
+    void printEventCounts(int reduce);
 
     void setNumThreads(int num_threads);
     int initThreadSet(int tid);

@@ -119,10 +119,16 @@ track_generator.generateTracks()
 
 solver = CPUSolver(geometry, track_generator)
 
+# Add PAPI events to be counted
+solver.addPapiEvent("PAPI_TOT_INS")
+solver.addPapiEvent("PAPI_TOT_CYC")
+solver.addPapiEvent("PAPI_L1_DCM")
 solver.setNumThreads(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)
 solver.printTimerReport()
+
+solver.printPapiEventCounts(-1)
 
 
 ###############################################################################

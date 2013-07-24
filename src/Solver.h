@@ -22,6 +22,8 @@
 #include "pairwise_sum.h"
 #endif
 
+#define NUM_CODE_SECTIONS 1
+
 #define _scalar_flux(r,e) (_scalar_flux[(r)*_num_groups + (e)])
 
 #define _source(r,e) (_source[(r)*_num_groups + (e)])
@@ -58,6 +60,11 @@
 class Solver {
 
 protected:
+
+    /******* PAPI *******/
+    PapiProfiler *_papiProfiler;
+
+    /********************/
 
     /** The number of azimuthal angles */
     int _num_azim;
@@ -224,6 +231,14 @@ public:
 
     virtual FP_PRECISION convergeSource(int max_iterations);
     virtual void computePinPowers() =0;
+
+    /*** PapiProfiler wrappers ***/
+
+    virtual int addPapiEvent(char *event);
+    virtual int clearPapiEvents();
+    virtual void printPapiEventCounts(int reduce);
+
+    /*****************************/
 
 
     void printTimerReport();

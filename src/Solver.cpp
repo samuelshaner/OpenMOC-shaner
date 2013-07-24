@@ -60,6 +60,13 @@ Solver::Solver(Geometry* geometry, TrackGenerator* track_generator) {
 
     _timer = new Timer();
 
+    /**** PAPI ******/ 
+
+    _papiProfiler = new PapiProfiler(1,NUM_CODE_SECTIONS);
+    _papiProfiler->init();
+
+    /****************/
+
 }
 
 
@@ -110,6 +117,9 @@ Solver::~Solver() {
 
     if (_quad != NULL)
         delete _quad;
+
+    if (_papiProfiler != NULL)
+        delete _papiProfiler;
 }
 
 
@@ -380,12 +390,6 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     flattenFSRSources(1.0);
     zeroTrackFluxes();
 
-    /*** TEMP PAPI TESTING ********/
-
-    // max_iterations = 1;
-
-    /*****************************/
-
     /* Source iteration loop */
     for (int i=0; i < max_iterations; i++) {
 
@@ -404,7 +408,7 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 
 
 	_timer->startTimer();
-	transportSweep();	
+	transportSweep();
 	_timer->stopTimer();
 	_timer->recordSplit("Transport sweep across the geometry");
 
@@ -490,4 +494,24 @@ void Solver::printTimerReport() {
     _timer->printSplits();
 
     log_printf(SEPARATOR, "*");
+}
+
+/******* PAPI *******/
+
+int Solver::addPapiEvent(char *event) {
+
+    int retval;
+    retval = _papiProfiler->addEvent(event);
+    return retval;
+}
+
+int Solver::clearPapiEvents() {
+
+    int retval;
+    retval = _papiProfiler->clearEvents();
+    return retval;
+}
+
+void Solver::printPapiEventCounts(int reduce) {
+    _papiProfiler->printEventCounts(reduce);
 }

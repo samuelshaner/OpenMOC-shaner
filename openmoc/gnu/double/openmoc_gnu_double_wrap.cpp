@@ -10745,6 +10745,125 @@ fail:
 }
 
 
+SWIGINTERN PyObject *_wrap_Solver_addPapiEvent(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+  PyObject *resultobj = 0;
+  Solver *arg1 = (Solver *) 0 ;
+  char *arg2 = (char *) 0 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  int res2 ;
+  char *buf2 = 0 ;
+  int alloc2 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  char *  kwnames[] = {
+    (char *) "self",(char *) "event", NULL 
+  };
+  int result;
+  
+  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Solver_addPapiEvent",kwnames,&obj0,&obj1)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Solver, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Solver_addPapiEvent" "', argument " "1"" of type '" "Solver *""'"); 
+  }
+  arg1 = reinterpret_cast< Solver * >(argp1);
+  res2 = SWIG_AsCharPtrAndSize(obj1, &buf2, NULL, &alloc2);
+  if (!SWIG_IsOK(res2)) {
+    SWIG_exception_fail(SWIG_ArgError(res2), "in method '" "Solver_addPapiEvent" "', argument " "2"" of type '" "char *""'");
+  }
+  arg2 = reinterpret_cast< char * >(buf2);
+  {
+    try {
+      result = (int)(arg1)->addPapiEvent(arg2);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_From_int(static_cast< int >(result));
+  if (alloc2 == SWIG_NEWOBJ) delete[] buf2;
+  return resultobj;
+fail:
+  if (alloc2 == SWIG_NEWOBJ) delete[] buf2;
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Solver_clearPapiEvents(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  Solver *arg1 = (Solver *) 0 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  PyObject * obj0 = 0 ;
+  int result;
+  
+  if (!PyArg_ParseTuple(args,(char *)"O:Solver_clearPapiEvents",&obj0)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Solver, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Solver_clearPapiEvents" "', argument " "1"" of type '" "Solver *""'"); 
+  }
+  arg1 = reinterpret_cast< Solver * >(argp1);
+  {
+    try {
+      result = (int)(arg1)->clearPapiEvents();
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_From_int(static_cast< int >(result));
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_Solver_printPapiEventCounts(PyObject *SWIGUNUSEDPARM(self), PyObject *args, PyObject *kwargs) {
+  PyObject *resultobj = 0;
+  Solver *arg1 = (Solver *) 0 ;
+  int arg2 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  int val2 ;
+  int ecode2 = 0 ;
+  PyObject * obj0 = 0 ;
+  PyObject * obj1 = 0 ;
+  char *  kwnames[] = {
+    (char *) "self",(char *) "reduce", NULL 
+  };
+  
+  if (!PyArg_ParseTupleAndKeywords(args,kwargs,(char *)"OO:Solver_printPapiEventCounts",kwnames,&obj0,&obj1)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_Solver, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "Solver_printPapiEventCounts" "', argument " "1"" of type '" "Solver *""'"); 
+  }
+  arg1 = reinterpret_cast< Solver * >(argp1);
+  ecode2 = SWIG_AsVal_int(obj1, &val2);
+  if (!SWIG_IsOK(ecode2)) {
+    SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "Solver_printPapiEventCounts" "', argument " "2"" of type '" "int""'");
+  } 
+  arg2 = static_cast< int >(val2);
+  {
+    try {
+      (arg1)->printPapiEventCounts(arg2);
+    } catch (const std::runtime_error &e) {
+      SWIG_exception(SWIG_RuntimeError, err_occurred());
+      return NULL;
+    } catch (const std::exception &e) {
+      SWIG_exception(SWIG_RuntimeError, e.what()); 
+    }
+  }
+  resultobj = SWIG_Py_Void();
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
 SWIGINTERN PyObject *_wrap_Solver_printTimerReport(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   Solver *arg1 = (Solver *) 0 ;
@@ -17983,6 +18102,9 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"Solver_setSourceConvergenceThreshold", (PyCFunction) _wrap_Solver_setSourceConvergenceThreshold, METH_VARARGS | METH_KEYWORDS, NULL},
 	 { (char *)"Solver_convergeSource", (PyCFunction) _wrap_Solver_convergeSource, METH_VARARGS | METH_KEYWORDS, NULL},
 	 { (char *)"Solver_computePinPowers", _wrap_Solver_computePinPowers, METH_VARARGS, NULL},
+	 { (char *)"Solver_addPapiEvent", (PyCFunction) _wrap_Solver_addPapiEvent, METH_VARARGS | METH_KEYWORDS, NULL},
+	 { (char *)"Solver_clearPapiEvents", _wrap_Solver_clearPapiEvents, METH_VARARGS, NULL},
+	 { (char *)"Solver_printPapiEventCounts", (PyCFunction) _wrap_Solver_printPapiEventCounts, METH_VARARGS | METH_KEYWORDS, NULL},
 	 { (char *)"Solver_printTimerReport", _wrap_Solver_printTimerReport, METH_VARARGS, NULL},
 	 { (char *)"Solver_swigregister", Solver_swigregister, METH_VARARGS, NULL},
 	 { (char *)"new_CPUSolver", (PyCFunction) _wrap_new_CPUSolver, METH_VARARGS | METH_KEYWORDS, NULL},
@@ -19097,6 +19219,7 @@ SWIG_init(void) {
   SWIG_Python_SetConstant(d, "LEONARD",SWIG_From_int(static_cast< int >(LEONARD)));
   SWIG_Python_SetConstant(d, "TABUCHI",SWIG_From_int(static_cast< int >(TABUCHI)));
   SWIG_Python_SetConstant(d, "NUM_SECTIONS",SWIG_From_int(static_cast< int >(1)));
+  SWIG_Python_SetConstant(d, "NUM_CODE_SECTIONS",SWIG_From_int(static_cast< int >(1)));
   SWIG_Python_SetConstant(d, "FOUR_PI",SWIG_From_double(static_cast< double >(12.5663706143)));
   SWIG_Python_SetConstant(d, "ONE_OVER_FOUR_PI",SWIG_From_double(static_cast< double >(0.0795774715)));
   SWIG_Python_SetConstant(d, "ON_SURFACE_THRESH",SWIG_From_double(static_cast< double >(1E-12)));

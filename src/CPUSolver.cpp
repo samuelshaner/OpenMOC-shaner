@@ -20,13 +20,6 @@ CPUSolver::CPUSolver(Geometry* geom, TrackGenerator* track_generator) :
     _exponentials = NULL;
 
     _interpolate_exponent = true;
-    _papiProfiler = new PapiProfiler(1);
-
-    /**** PAPI ******/ 
-
-    _papiProfiler->init();
-
-    /****************/
 
 }
 
@@ -47,8 +40,6 @@ CPUSolver::~CPUSolver() {
     if (_exponentials != NULL)
         delete [] _exponentials;
 
-    if (_papiProfiler != NULL)
-        delete _papiProfiler;
 }
 
 
@@ -710,13 +701,6 @@ void CPUSolver::transportSweep() {
     segment* curr_segment;    
     FP_PRECISION* track_flux;
 
-    /**** PAPI TESTING ****/
-
-    if( _papiProfiler->getNumEvents() < 1 )
-        _papiProfiler->addEvent("PAPI_TOT_INS");
-
-    /*********************/
-
     log_printf(DEBUG, "Transport sweep with %d OpenMP threads", _num_threads);
 
     /* Initialize flux in each region to zero */
@@ -754,13 +738,13 @@ void CPUSolver::transportSweep() {
 	                        &_thread_fsr_flux(tid));
 	    }
 
-        _papiProfiler->accumThreadSet(tid);
-        _papiProfiler->stopThreadSet(tid);
-
-        /***********************/
+        /*********************/
 
 	    /* Transfer flux to outgoing track */
 	    transferBoundaryFlux(track_id, true, track_flux);
+
+        _papiProfiler->accumThreadSet(tid);
+        _papiProfiler->stopThreadSet(tid);
 	    
 	    /* Loop over each segment in reverse direction */
 	    track_flux += _polar_times_groups;
@@ -770,13 +754,17 @@ void CPUSolver::transportSweep() {
 		scalarFluxTally(curr_segment, track_flux, 
 				&_thread_fsr_flux(tid));
 	    }
+
+
+        _papiProfiler->accumThreadSet(tid);
+        _papiProfiler->stopThreadSet(tid);
 	    
 	    /* Transfer flux to outgoing track */
 	    transferBoundaryFlux(track_id, false, track_flux);
 	}
     }
 
-    _papiProfiler->printEventCounts();
+    _papiProfiler->printEventCounts(THR_REDUCE);
 
     return;
 }
