@@ -367,6 +367,19 @@ class configuration:
         # NumPy typemaps in the source code
         if not self.with_numpy:
             self.swig_flags += ['-DNO_NUMPY']
+
+        if self.with_papi:
+            self.sources['gcc'] += ['src/PapiProfiler.cpp']
+            self.sources['icpc'] += ['src/PapiProfiler.cpp']
+            self.sources['bgxlc'] += ['src/PapiProfiler.cpp']
+            self.compiler_flags['gcc'] += ['-L/usr/local/lib']
+            self.shared_libraries['gcc'] += ['papi']
+            self.swig_flags += ['-DPAPI']
+
+            for cc in self.macros.keys():
+                for fp in self.macros[cc].keys():
+                    self.macros[cc][fp] += [('PAPI', None)]
+
         
         # The main openmoc extension (defaults are gcc and single precision)
         self.extensions.append(

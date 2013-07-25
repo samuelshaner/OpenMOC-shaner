@@ -17,7 +17,10 @@
     #include "../src/Track.h" 
     #include "../src/TrackGenerator.h"
     #include "../src/Universe.h"
-    #include "../src/PapiProfiler.h"
+
+    #ifdef PAPI
+        #include "../src/PapiProfiler.h"
+    #endif
 
     #define printf PySys_WriteStdout
 
@@ -204,7 +207,10 @@
 %include ../src/Track.h
 %include ../src/TrackGenerator.h
 %include ../src/Universe.h
-%include ../src/PapiProfiler.h
+
+#ifdef PAPI
+    %include ../src/PapiProfiler.h
+#endif
 
 
 #ifdef DOUBLE

@@ -16,13 +16,15 @@
 #include <math.h>
 #include <vector>
 #include <string>
-#include "PapiProfiler.h"
 #include "Timer.h"
 #include "Quadrature.h"
 #include "TrackGenerator.h"
 #include "pairwise_sum.h"
 #endif
 
+#ifdef PAPI
+    #include "PapiProfiler.h"
+#endif
 
 /** Indexing macro for the scalar flux in each flat source region and in
  *  each energy group */
@@ -80,11 +82,6 @@
 class Solver {
 
 protected:
-
-    /******* PAPI *******/
-    PapiProfiler *_papiProfiler;
-
-    /********************/
 
     /** The number of azimuthal angles */
     int _num_azim;
@@ -309,6 +306,10 @@ protected:
 
     void clearTimerSplits();
 
+    #ifdef PAPI
+        PapiProfiler *_papiProfiler;
+    #endif
+
 public:
     Solver(Geometry* geom=NULL, TrackGenerator* track_generator=NULL);
     virtual ~Solver();
@@ -367,13 +368,16 @@ public:
      */
     virtual void computePinPowers() =0;
 
-    /*** PapiProfiler wrappers ***/
+    #ifdef PAPI
+        /*** PapiProfiler wrappers ***/
 
-    virtual int addPapiEvent(char *event);
-    virtual int clearPapiEvents();
-    virtual void printPapiEventCounts(int reduce);
+        virtual int addPapiEvent(char *event);
+        virtual int clearPapiEvents();
+        virtual void printPapiEventCounts(int reduce);
+        virtual void printPapiEventCountsPerUnit(int reduce, int perunit);
 
-    /*****************************/
+        /*****************************/
+    #endif
 
 
     void printTimerReport();

@@ -42,6 +42,13 @@ class CPUSolver : public Solver {
 
 protected:
 
+    /***** FSR Thread Collision *****/
+
+    unsigned int _gbl_collisions;
+    omp_lock_t _gbl_collisions_lock;
+
+    /********************************/
+
     /** The number of shared memory OpenMP threads */
     int _num_threads;
 

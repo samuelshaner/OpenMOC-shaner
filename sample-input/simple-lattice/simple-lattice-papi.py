@@ -118,10 +118,18 @@ track_generator.generateTracks()
 
 solver = CPUSolver(geometry, track_generator)
 
-solver.setNumThreads(num_threads)
+# Add PAPI events to be counted
+# solver.addPapiEvent("PAPI_TOT_INS")
+solver.addPapiEvent("PAPI_TOT_CYC")
+solver.addPapiEvent("PAPI_L1_DCM")
+
+# solver.setNumThreads(num_threads)
+solver.setNumThreads(1)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)
 solver.printTimerReport()
+
+solver.printPapiEventCountsPerUnit(-4,track_generator.getNumTracks())
 
 ###############################################################################
 ############################   Generating Plots   #############################

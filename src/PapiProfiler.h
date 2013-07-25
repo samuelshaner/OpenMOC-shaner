@@ -10,10 +10,19 @@
 #include "log.h"
 
 #define CHARBUF 128
-#define THR_REDUCE -1
-#define THR_SEPARATE -2
+// #define THR_SEPARATE -1
+// #define THR_REDUCE -2
+// #define THR_SEPARATE_GBL -3
+// #define THR_REDUCE_GBL -4
 
 #endif
+
+enum {
+	THR_SEPARATE,
+	THR_REDUCE,
+	THR_SEPARATE_GBL,
+	THR_REDUCE_GBL
+};
 
 typedef struct _papiThreadSet{
 
@@ -35,6 +44,7 @@ protected:
 	/* Vector of papiThreadSet structs which keep track of
 	   counts for each thread, of length _NUM_THREADS */	
 	std::vector<papiThreadSet> _thrset_arr;
+	std::vector<papiThreadSet> _gbl_thrset_arr;
 
 	int _num_codeSections;
 	int _num_threads;
@@ -49,7 +59,9 @@ public:
     int addEvent(char *event);
     int getNumEvents();
     int clearEvents();
+    void printEventCountsPerUnit(int reduce, int perunit);
     void printEventCounts(int reduce);
+    void gblAccum();
 
     void setNumThreads(int num_threads);
     int initThreadSet(int tid);

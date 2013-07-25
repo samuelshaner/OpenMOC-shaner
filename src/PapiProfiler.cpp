@@ -6,6 +6,7 @@ PapiProfiler::PapiProfiler(int num_threads, int num_codeSections) {
 		_num_threads = num_threads;
 		for(int i=0; i<num_threads; i++){
 			_thrset_arr.push_back(papiThreadSet({PAPI_NULL, NULL, false}));
+			_gbl_thrset_arr.push_back(papiThreadSet({PAPI_NULL, NULL, false}));
 		}
 	}
 	else{
@@ -97,11 +98,13 @@ void PapiProfiler::setNumThreads(int num_threads){
 	if( num_threads > _num_threads){
 		for(int i=0; i< (num_threads - _num_threads) ; i++){
 			_thrset_arr.push_back(papiThreadSet({PAPI_NULL, NULL, false}));
+			_gbl_thrset_arr.push_back(papiThreadSet({PAPI_NULL, NULL, false}));
 		}
 	}
 	if( num_threads < _num_threads){
 		for(int i=0; i< (_num_threads - num_threads) ; i++){
 			_thrset_arr.pop_back();
+			_gbl_thrset_arr.pop_back();
 		}
 	}
 	if( num_threads != _num_threads)
@@ -133,17 +136,25 @@ int PapiProfiler::initThreadSet(int tid) {
 		    _thrset_arr[tid].values = 
 		    	(long long *) malloc( sizeof(long long) * _EventCodes.size() );
 		    if( _thrset_arr[tid].values == NULL){
-		    	log_printf(ERROR,"Could not allocate thr set values");
+		    	log_printf(ERROR,"Could not allocate thrset values");
+		    }
+
+	    	_gbl_thrset_arr[tid].values = 
+		    	(long long *) malloc( sizeof(long long) * _EventCodes.size() );
+		    if( _gbl_thrset_arr[tid].values == NULL){
+		    	log_printf(ERROR,"Could not allocate gbl_thrset values");
 		    }
 
 		    for(i=0; i<_EventCodes.size(); i++){
 		    	_thrset_arr[tid].values[i] = 0;
+		    	_gbl_thrset_arr[tid].values[i] = 0;
 		        retval = PAPI_add_event( *EventSet, _EventCodes[i]);
 		        if ( retval != PAPI_OK )
 		            handleError("Thread PAPI: Could not add event", retval);
 		    }
 
 		    _thrset_arr[tid].init = true;
+		    _gbl_thrset_arr[tid].init = true;
 
 		    log_printf(NORMAL, "Papi Thread %d EventSet initialized", tid);
 
@@ -243,18 +254,90 @@ int PapiProfiler::handleError(const char *msg, int retval) {
     return retval;
 }
 
-void PapiProfiler::printEventCounts(int reduce) {
+void PapiProfiler::gblAccum() {
+
+	for(int i=0; i<_EventCodes.size(); i++){
+		for(int j=0; j<_num_threads; j++){
+			if(_gbl_thrset_arr[j].init == false ) 
+				_gbl_thrset_arr[j].values[i] = 0;
+			_gbl_thrset_arr[j].values[i] += _thrset_arr[j].values[i];
+		}
+	}
+
+}
+
+void PapiProfiler::printEventCountsPerUnit(int reduce, int perunit) {
     
     int i,j;
 	int *accum = (int *) malloc(_EventCodes.size() * sizeof(int));
-	double l1_dcm_per_cycle;
+	double ratio;
     char eventname[CHARBUF];
+
+    unsigned int n,d;
+
+    log_printf(NORMAL,"Number of threads: %d", _num_threads);
 
     if( reduce == THR_SEPARATE){
 		for(j=0; j<_EventCodes.size(); j++){
 		    for(i=0; i<_num_threads; i++){
 	    		PAPI_event_code_to_name(_EventCodes[j],eventname);
-	    		log_printf(NORMAL, "[%s]: TID [%d]: %lld", 
+	    		log_printf(RESULT, "[%s]: TID [%d]: %f", 
+	    			eventname, i, _thrset_arr[i].values[j]/(double)perunit);
+	    	}
+	    }
+	}
+	if( reduce == THR_REDUCE ){
+		for(j=0; j<_EventCodes.size(); j++){
+			accum[j] = 0;
+		    for(i=0; i<_num_threads; i++){
+		    	accum[j] += _thrset_arr[i].values[j];
+	    	}
+	    	PAPI_event_code_to_name(_EventCodes[j],eventname);
+    		log_printf(RESULT, "[%s]: Thread Sum: %f", 
+	    			eventname, accum[j]/(double)perunit);
+	    }
+	}
+	if( reduce == THR_SEPARATE_GBL ){
+		for(j=0; j<_EventCodes.size(); j++){
+		    for(i=0; i<_num_threads; i++){
+	    		PAPI_event_code_to_name(_EventCodes[j],eventname);
+	    		log_printf(RESULT, "GBL [%s]: TID [%d]: %f", 
+	    			eventname, i, _gbl_thrset_arr[i].values[j]/(double)perunit);
+	    	}
+	    }
+	}
+	if( reduce == THR_REDUCE_GBL ){
+		for(j=0; j<_EventCodes.size(); j++){
+			accum[j] = 0;
+		    for(i=0; i<_num_threads; i++){
+		    	accum[j] += _gbl_thrset_arr[i].values[j];
+	    	}
+	    	PAPI_event_code_to_name(_EventCodes[j],eventname);
+    		log_printf(RESULT, "GBL [%s]: Thread Sum: %f", 
+    			eventname, (unsigned int)accum[j]/(double)perunit);
+	    }
+
+	}
+
+	free(accum);	
+}
+
+void PapiProfiler::printEventCounts(int reduce) {
+    
+    int i,j;
+	int *accum = (int *) malloc(_EventCodes.size() * sizeof(int));
+	double ratio;
+    char eventname[CHARBUF];
+
+    unsigned int n,d;
+
+    log_printf(NORMAL,"Number of threads: %d", _num_threads);
+
+    if( reduce == THR_SEPARATE){
+		for(j=0; j<_EventCodes.size(); j++){
+		    for(i=0; i<_num_threads; i++){
+	    		PAPI_event_code_to_name(_EventCodes[j],eventname);
+	    		log_printf(RESULT, "[%s]: TID [%d]: %lld", 
 	    			eventname, i, _thrset_arr[i].values[j]);
 	    	}
 	    }
@@ -266,11 +349,31 @@ void PapiProfiler::printEventCounts(int reduce) {
 		    	accum[j] += _thrset_arr[i].values[j];
 	    	}
 	    	PAPI_event_code_to_name(_EventCodes[j],eventname);
-    		log_printf(NORMAL, "[%s]: Thread Sum: %lld", 
+    		log_printf(RESULT, "[%s]: Thread Sum: %lld", 
 	    			eventname, accum[j]);
 	    }
-	    l1_dcm_per_cycle = (double) accum[2]/ (double) accum[1];
-	    log_printf(NORMAL, "[L1_DCM/CYCLE]: %f", l1_dcm_per_cycle);
+	}
+	if( reduce == THR_SEPARATE_GBL ){
+		for(j=0; j<_EventCodes.size(); j++){
+		    for(i=0; i<_num_threads; i++){
+	    		PAPI_event_code_to_name(_EventCodes[j],eventname);
+	    		log_printf(RESULT, "GBL [%s]: TID [%d]: %lld", 
+	    			eventname, i, _gbl_thrset_arr[i].values[j]);
+	    	}
+	    }
+	}
+	if( reduce == THR_REDUCE_GBL ){
+		for(j=0; j<_EventCodes.size(); j++){
+			accum[j] = 0;
+		    for(i=0; i<_num_threads; i++){
+		    	accum[j] += _gbl_thrset_arr[i].values[j];
+	    	}
+	    	PAPI_event_code_to_name(_EventCodes[j],eventname);
+    		log_printf(RESULT, "GBL [%s]: Thread Sum: %lld", eventname, accum[j]);
+	    }
+	    // n = (unsigned int) accum[1];
+	    // d = (unsigned int) accum[0];
+	    // log_printf(NORMAL,"N/D: %f", (double)n/d);
 	}
 
 	free(accum);

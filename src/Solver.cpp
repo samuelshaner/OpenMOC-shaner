@@ -63,12 +63,15 @@ Solver::Solver(Geometry* geometry, TrackGenerator* track_generator) {
 
     _timer = new Timer();
 
+
+    #ifdef PAPI
     /**** PAPI ******/ 
 
     _papiProfiler = new PapiProfiler(1,NUM_CODE_SECTIONS);
     _papiProfiler->init();
 
     /****************/
+    #endif
 
 }
 
@@ -127,8 +130,10 @@ Solver::~Solver() {
     if (_quad != NULL)
         delete _quad;
 
+    #ifdef PAPI
     if (_papiProfiler != NULL)
         delete _papiProfiler;
+    #endif
 }
 
 
@@ -528,6 +533,8 @@ void Solver::printTimerReport() {
     log_printf(SEPARATOR, "-");
 }
 
+
+#ifdef PAPI
 /******* PAPI *******/
 
 int Solver::addPapiEvent(char *event) {
@@ -547,3 +554,9 @@ int Solver::clearPapiEvents() {
 void Solver::printPapiEventCounts(int reduce) {
     _papiProfiler->printEventCounts(reduce);
 }
+
+void Solver::printPapiEventCountsPerUnit(int reduce, int perunit) {
+    _papiProfiler->printEventCountsPerUnit(reduce,perunit);
+}
+
+#endif

@@ -15,6 +15,10 @@ CPUSolver::CPUSolver(Geometry* geometry, TrackGenerator* track_generator) :
 
     setNumThreads(1);
 
+    /*** Collision test ***/
+    _gbl_collisions = 0;
+    omp_init_lock(&_gbl_collisions_lock);
+
     _FSR_locks = NULL;
     _thread_fsr_flux = NULL;
     _interpolate_exponential = true;
@@ -34,6 +38,8 @@ CPUSolver::~CPUSolver() {
 
     if (_thread_fsr_flux != NULL)
         delete [] _thread_fsr_flux;
+
+     omp_destroy_lock(&_gbl_collisions_lock);
 
 }
 
@@ -139,8 +145,10 @@ void CPUSolver::setNumThreads(int num_threads) {
 
     _num_threads = num_threads;
 
+    #ifdef PAPI
     if(_papiProfiler != NULL)
         _papiProfiler->setNumThreads(num_threads);
+    #endif
 
     /* Set the number of threads for OpenMP */
     omp_set_num_threads(_num_threads);
@@ -709,8 +717,10 @@ void CPUSolver::transportSweep() {
 
         /*** CODE SECTION 0 ****/
 
-        _papiProfiler->initThreadSet(tid);
-        _papiProfiler->startThreadSet(tid);
+        #ifdef PAPI
+            _papiProfiler->initThreadSet(tid);
+            _papiProfiler->startThreadSet(tid);
+        #endif
 
 	    /* Loop over each segment in forward direction */
 	    for (int s=0; s < num_segments; s++) {
@@ -719,13 +729,8 @@ void CPUSolver::transportSweep() {
 	                        &_thread_fsr_flux(tid));
 	    }
 
-        /*********************/
-
 	    /* Transfer flux to outgoing track */
 	    transferBoundaryFlux(track_id, true, track_flux);
-
-        _papiProfiler->accumThreadSet(tid);
-        _papiProfiler->stopThreadSet(tid);
 	    
 	    /* Loop over each segment in reverse direction */
 	    track_flux += _polar_times_groups;
@@ -736,16 +741,24 @@ void CPUSolver::transportSweep() {
 				&_thread_fsr_flux(tid));
 	    }
 
-
-        _papiProfiler->accumThreadSet(tid);
-        _papiProfiler->stopThreadSet(tid);
+        #ifdef PAPI
+            _papiProfiler->accumThreadSet(tid);
+            _papiProfiler->stopThreadSet(tid);
+        #endif
 	    
 	    /* Transfer flux to outgoing track */
 	    transferBoundaryFlux(track_id, false, track_flux);
 	}
     }
 
-    _papiProfiler->printEventCounts(THR_REDUCE);
+    #ifdef PAPI
+
+    // _papiProfiler->printEventCounts(THR_SEPARATE);
+    _papiProfiler->gblAccum();
+
+    #endif
+
+    log_printf(RESULT,"Total number of FSR collisions: %d",_gbl_collisions);
 
     return;
 }
@@ -790,6 +803,11 @@ void CPUSolver::scalarFluxTally(segment* curr_segment,
     }
 
     /* Atomically increment the FSR scalar flux from the temporary array */
+    if( omp_test_lock(&_FSR_locks[fsr_id])  ){
+        omp_set_lock(&_gbl_collisions_lock);
+        _gbl_collisions++;
+        omp_unset_lock(&_gbl_collisions_lock);
+    }
     omp_set_lock(&_FSR_locks[fsr_id]);
     {
         for (int e=0; e < _num_groups; e++)
