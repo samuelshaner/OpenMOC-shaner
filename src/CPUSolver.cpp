@@ -689,6 +689,8 @@ void CPUSolver::transportSweep() {
     segment* segments;
     FP_PRECISION* track_flux;
 
+    _gbl_collisions = 0;
+
     log_printf(DEBUG, "Transport sweep with %d OpenMP threads", _num_threads);
 
     /* Initialize flux in each region to zero */
@@ -704,7 +706,7 @@ void CPUSolver::transportSweep() {
 
 	/* Loop over each thread within this azimuthal angle halfspace */
 	#pragma omp parallel for private(curr_track, num_segments, \
-          curr_segment, segments, track_flux, tid) schedule(guided)
+          curr_segment, segments, track_flux, tid) //schedule(guided)
 	for (int track_id=min_track; track_id < max_track; track_id++) {
 
 	    tid = omp_get_thread_num();
@@ -758,8 +760,6 @@ void CPUSolver::transportSweep() {
 
     #endif
 
-    log_printf(RESULT,"Total number of FSR collisions: %d",_gbl_collisions);
-
     return;
 }
 
@@ -783,6 +783,8 @@ void CPUSolver::scalarFluxTally(segment* curr_segment,
     FP_PRECISION length = curr_segment->_length;
     double* sigma_t = curr_segment->_material->getSigmaT();
 
+    bool collided_once = false;
+
     /* The average flux along this segment in the flat source region */
     FP_PRECISION psibar;
     FP_PRECISION exponential;
@@ -803,16 +805,17 @@ void CPUSolver::scalarFluxTally(segment* curr_segment,
     }
 
     /* Atomically increment the FSR scalar flux from the temporary array */
-    if( omp_test_lock(&_FSR_locks[fsr_id])  ){
-        omp_set_lock(&_gbl_collisions_lock);
-        _gbl_collisions++;
-        omp_unset_lock(&_gbl_collisions_lock);
+    while( !omp_test_lock(&_FSR_locks[fsr_id])  ){
+        if( !collided_once ){
+            collided_once = true;
+            omp_set_lock(&_gbl_collisions_lock);
+            _gbl_collisions++;
+            omp_unset_lock(&_gbl_collisions_lock);
+        }
     }
-    omp_set_lock(&_FSR_locks[fsr_id]);
-    {
-        for (int e=0; e < _num_groups; e++)
+
+    for (int e=0; e < _num_groups; e++)
 	    _scalar_flux(fsr_id,e) += fsr_flux[e];
-    }
     omp_unset_lock(&_FSR_locks[fsr_id]);
 
     return;
@@ -986,4 +989,17 @@ void CPUSolver::computePinPowers() {
         _FSRs_to_pin_powers[r] /= avg_pin_power;
 
     return;
+}
+
+unsigned int CPUSolver::getCollisionCount() {
+
+    double collisions_estimate = (1.0/_num_FSRs) * 
+                                 ((double)_track_generator->getNumSegments()/_num_threads) *
+                                 (_num_threads-1);
+
+    log_printf(RESULT,"Total number of FSR collisions: %d",_gbl_collisions);
+    log_printf(RESULT,"FSR collisions/segment: %f",_gbl_collisions/(double)_track_generator->getNumSegments());
+    log_printf(RESULT,"Estimated # collisions: %f", collisions_estimate);
+    
+    return _gbl_collisions;
 }

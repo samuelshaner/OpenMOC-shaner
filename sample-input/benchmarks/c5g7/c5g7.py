@@ -2,7 +2,8 @@ from openmoc import *
 import openmoc.log as log
 import openmoc.plotter as plotter
 import openmoc.materialize as materialize
-
+import numpy as np
+import matplotlib.pyplot as mpl
 
 ###############################################################################
 #######################   Main Simulation Parameters   ########################
@@ -337,11 +338,22 @@ track_generator.generateTracks()
 ###########################   Running a Simulation   ##########################
 ###############################################################################
 
-solver = ThreadPrivateSolver(geometry, track_generator)
-solver.setSourceConvergenceThreshold(tolerance)
-solver.setNumThreads(num_threads)
-solver.convergeSource(max_iters)
-solver.printTimerReport()
+num_threads = np.arange(1,9,dtype=np.int32)
+col_per_segment = np.zeros(num_threads[-1])
+max_iters = 1;
+
+for t in num_threads:
+     solver = CPUSolver(geometry, track_generator)
+     solver.setNumThreads(int(t))
+     solver.setSourceConvergenceThreshold(tolerance)
+     solver.convergeSource(max_iters)
+     solver.printTimerReport()
+     col_per_segment[t-1] = float(solver.getCollisionCount())/track_generator.getNumSegments();
+
+# Plotting collision count
+fig = mpl.figure()
+mpl.plot(num_threads,col_per_segment)
+mpl.show()
 
 
 ###############################################################################

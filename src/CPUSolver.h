@@ -118,6 +118,10 @@ public:
     void setNumThreads(int num_threads);
     
     void computePinPowers();
+
+    /*** Collision Counter ***/
+    unsigned int getCollisionCount();
+
 };
 
 

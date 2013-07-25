@@ -2,6 +2,8 @@ from openmoc import *
 import openmoc.log as log
 import openmoc.plotter as plotter
 import openmoc.materialize as materialize
+import numpy as np
+import matplotlib.pyplot as mpl
 
 
 ###############################################################################
@@ -173,11 +175,22 @@ track_generator.generateTracks()
 ###########################   Running a Simulation   ##########################
 ###############################################################################
 
-solver = ThreadPrivateSolver(geometry, track_generator)
-solver.setNumThreads(num_threads)
-solver.setSourceConvergenceThreshold(tolerance)
-solver.convergeSource(max_iters)
-solver.printTimerReport()
+num_threads = np.arange(1,9,dtype=np.int32)
+col_per_segment = np.zeros(num_threads[-1])
+max_iters = 5;
+
+for t in num_threads:
+  solver = CPUSolver(geometry, track_generator)
+  solver.setNumThreads(int(t))
+  solver.setSourceConvergenceThreshold(tolerance)
+  solver.convergeSource(max_iters)
+  solver.printTimerReport()
+  col_per_segment[t-1] = float(solver.getCollisionCount())/track_generator.getNumSegments();
+
+# Plotting collision count
+fig = mpl.figure()
+mpl.plot(num_threads,col_per_segment)
+mpl.show()
 
 
 ###############################################################################
@@ -188,7 +201,7 @@ log.py_printf('NORMAL', 'Plotting data...')
 
 #plotter.plotTracks(track_generator)
 #plotter.plotSegments(track_generator)
-#plotter.plotMaterials(geometry, gridsize=500)
+plotter.plotMaterials(geometry, gridsize=250)
 #plotter.plotCells(geometry, gridsize=500)
 #plotter.plotFlatSourceRegions(geometry, gridsize=500)
 #plotter.plotFluxes(geometry, solver, energy_groups=[1,2,3,4,5,6,7])
