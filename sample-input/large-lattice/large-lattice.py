@@ -16,7 +16,7 @@ num_azim = options.num_azim
 tolerance = options.tolerance
 max_iters = options.max_iters
 
-log.setLogLevel('RESULT')
+log.setLogLevel('NORMAL')
 
 
 ###############################################################################
@@ -122,32 +122,76 @@ track_generator.generateTracks()
 ###########################   Running a Simulation   ##########################
 ###############################################################################
 
-num_threads = np.arange(1,9,dtype=np.int32)
-col_per_segment = np.zeros(num_threads[-1])
-max_iters = 5;
+# nthr_arr = [1,2,3,4,5,6,7,8]
+nthr_arr = [1,2,3,4,5,6,7,8]
+# nthr_arr = [1,2]
+# num_threads = 8;
+ev_arr = ['PAPI_TOT_CYC',
+          'PAPI_L1_DCM',
+          'PAPI_TOT_INS']
 
-for t in num_threads:
-	solver = CPUSolver(geometry, track_generator)
-	solver.setNumThreads(int(t))
+thr_counts = np.zeros((len(nthr_arr), len(nthr_arr), len(ev_arr)), dtype=np.int64)
+thr_counts_accum = np.zeros((len(nthr_arr), len(ev_arr)),  dtype=np.int64)
+
+solver = CPUSolver(geometry, track_generator)
+for event in ev_arr:
+	solver.addPapiEvent(event)
+# max_iters = 5
+
+for num_threads in nthr_arr:
+	solver.setNumThreads(num_threads)
 	solver.setSourceConvergenceThreshold(tolerance)
 	solver.convergeSource(max_iters)
 	solver.printTimerReport()
-	col_per_segment[t-1] = float(solver.getCollisionCount())/track_generator.getNumSegments();
 
-# Plotting collision count
-# fig = mpl.figure()
-# mpl.plot(num_threads,col_per_segment)
+	for tid in xrange(thr_counts.shape[1]):
+		for event in xrange(thr_counts.shape[2]):
+			if tid < num_threads:
+				value = solver.getThreadEventCount(ev_arr[event],tid)
+				thr_counts_accum[num_threads-1][event] += value
+
+	solver.resetPapiThreadCounts()
+
+fig = mpl.figure()
+# ax = fig.add_subplot(111)
+event0 = 0
+event1 = 1
+event2 = 2
+
+mpl.subplot(311)
+l = mpl.plot(nthr_arr, np.divide(thr_counts_accum[:,event0],nthr_arr), '-b')
+mpl.grid(True)
+mpl.title('PAPI counts')
+mpl.ylabel(ev_arr[event0])
+
+mpl.subplot(312)
+mpl.plot(nthr_arr, np.divide(thr_counts_accum[:,event1],nthr_arr), 'r')
+mpl.grid(True)
+mpl.ylabel(ev_arr[event1])
+
+mpl.subplot(313)
+mpl.plot(nthr_arr, np.divide(thr_counts_accum[:,event2],nthr_arr), 'r')
+mpl.grid(True)
+mpl.xlabel('Number of threads')
+mpl.ylabel(ev_arr[event2])
+
+mpl.show()
+
+# ax.set_title(ev_arr[event])
+# ax.set_xlabel('Number of threads')
+# ax.set_ylabel('Event count')
+# mpl.plot( nthr_arr, thr_counts_accum[:,0], '--r' )
 # mpl.show()
 
 ###############################################################################
 ############################   Generating Plots   #############################
 ###############################################################################
 
-log.py_printf('NORMAL', 'Plotting data...')
+# log.py_printf('NORMAL', 'Plotting data...')
 
 #plotter.plotTracks(track_generator)
 #plotter.plotSegments(track_generator)
-plotter.plotMaterials(geometry, gridsize=250)
+# plotter.plotMaterials(geometry, gridsize=250)
 #plotter.plotCells(geometry, gridsize=500)
 #plotter.plotFlatSourceRegions(geometry, gridsize=500)
 #plotter.plotFluxes(geometry, solver, energy_groups=[1,2,3,4,5,6,7])

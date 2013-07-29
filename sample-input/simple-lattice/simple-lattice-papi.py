@@ -123,13 +123,13 @@ solver = CPUSolver(geometry, track_generator)
 solver.addPapiEvent("PAPI_TOT_CYC")
 solver.addPapiEvent("PAPI_L1_DCM")
 
-# solver.setNumThreads(num_threads)
-solver.setNumThreads(1)
+solver.setNumThreads(num_threads)
+#solver.setNumThreads(1)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.convergeSource(max_iters)
 solver.printTimerReport()
 
-solver.printPapiEventCountsPerUnit(-4,track_generator.getNumTracks())
+solver.printPapiEventCounts(THR_REDUCE_GBL)
 
 ###############################################################################
 ############################   Generating Plots   #############################

@@ -233,7 +233,19 @@ int PapiProfiler::stopThreadSet(int tid) {
     return retval;
 }
 
-int PapiProfiler::clearThreadSet() {
+void PapiProfiler::resetThreadCounts() {
+	
+	int i,j;
+	for(i=0; i < _num_threads; i++){
+		for(j=0; j < _EventCodes.size(); j++){
+			_thrset_arr[i].values[j] = 0;
+			_gbl_thrset_arr[i].values[j] = 0;
+		}
+	}
+
+}
+
+int PapiProfiler::deleteThreadSet() {
     
     int retval;
     int i;
@@ -377,4 +389,33 @@ void PapiProfiler::printEventCounts(int reduce) {
 	}
 
 	free(accum);
+}
+
+long long PapiProfiler::getThreadEventCount(char* Event, int tid) {
+	
+
+	int index;
+	int EventCode;
+	int retval;
+
+    if ( (retval = PAPI_event_name_to_code(Event, &EventCode)) != PAPI_OK){
+        return handleError("Could not convert event name to code", retval);
+    }
+	index = getEventCodeIndex(EventCode);
+	if( index != -1){
+		return _gbl_thrset_arr[tid].values[index];
+	} else {
+		log_printf(NORMAL, "Event %s not found in current EventSet", Event);
+	}
+	return -1;
+}
+
+int PapiProfiler::getEventCodeIndex(int EventCode) {
+	int index = -1;
+	for(int i=0; i<_EventCodes.size(); i++) {
+		if(_EventCodes[i] == EventCode )
+			return i;
+	}
+
+	return index;
 }

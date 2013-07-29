@@ -551,12 +551,20 @@ int Solver::clearPapiEvents() {
     return retval;
 }
 
+void Solver::resetPapiThreadCounts() {
+    _papiProfiler->resetThreadCounts();
+}
+
 void Solver::printPapiEventCounts(int reduce) {
     _papiProfiler->printEventCounts(reduce);
 }
 
 void Solver::printPapiEventCountsPerUnit(int reduce, int perunit) {
     _papiProfiler->printEventCountsPerUnit(reduce,perunit);
+}
+
+long long Solver::getThreadEventCount(char* Event, int tid) {
+    return _papiProfiler->getThreadEventCount(Event,tid);
 }
 
 #endif

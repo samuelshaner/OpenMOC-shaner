@@ -1,6 +1,5 @@
 #include "CPUSolver.h"
 
-
 /**
  * @brief Constructor initializes array pointers for tracks and materials.
  * @details The constructor retrieves the number of energy groups and flat
@@ -792,6 +791,8 @@ void CPUSolver::scalarFluxTally(segment* curr_segment,
     /* Set the flat source region flux buffer to zero */
     memset(fsr_flux, 0.0, _num_groups * sizeof(FP_PRECISION));
 
+
+    /* TODO: Switch loop orders, check cache performance */
     /* Loop over polar angles */
     for (int e=0; e < _num_groups; e++) {
 
@@ -805,15 +806,15 @@ void CPUSolver::scalarFluxTally(segment* curr_segment,
     }
 
     /* Atomically increment the FSR scalar flux from the temporary array */
-    while( !omp_test_lock(&_FSR_locks[fsr_id])  ){
-        if( !collided_once ){
-            collided_once = true;
-            omp_set_lock(&_gbl_collisions_lock);
-            _gbl_collisions++;
-            omp_unset_lock(&_gbl_collisions_lock);
-        }
-    }
-
+    // while( !omp_test_lock(&_FSR_locks[fsr_id])  ){
+    //     if( !collided_once ){
+    //         collided_once = true;
+    //         omp_set_lock(&_gbl_collisions_lock);
+    //         _gbl_collisions++;
+    //         omp_unset_lock(&_gbl_collisions_lock);
+    //     }
+    // }
+    omp_set_lock(&_FSR_locks[fsr_id]);
     for (int e=0; e < _num_groups; e++)
 	    _scalar_flux(fsr_id,e) += fsr_flux[e];
     omp_unset_lock(&_FSR_locks[fsr_id]);

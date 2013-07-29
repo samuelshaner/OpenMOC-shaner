@@ -375,6 +375,8 @@ public:
         virtual int clearPapiEvents();
         virtual void printPapiEventCounts(int reduce);
         virtual void printPapiEventCountsPerUnit(int reduce, int perunit);
+        virtual long long getThreadEventCount(char* Event, int tid);
+        virtual void resetPapiThreadCounts();
 
         /*****************************/
     #endif

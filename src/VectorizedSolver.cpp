@@ -559,6 +559,7 @@ void VectorizedSolver::scalarFluxTally(segment* curr_segment,
         /* Loop over each energy group vector length */
         for (int v=0; v < _num_vector_lengths; v++) {
 
+        /* TODO: Check if vector instructions executing */
 	    /* Loop over energy groups within this vector */
             #pragma simd vectorlength(VEC_LENGTH) private(psibar)
             for (int e=v*VEC_LENGTH; e < (v+1)*VEC_LENGTH; e++) {

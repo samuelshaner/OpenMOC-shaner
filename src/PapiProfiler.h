@@ -49,6 +49,8 @@ protected:
 	int _num_codeSections;
 	int _num_threads;
 
+	int getEventCodeIndex(int EventCode);
+
 public:
 
 	PapiProfiler(int num_threads, int num_codeSections);
@@ -59,16 +61,18 @@ public:
     int addEvent(char *event);
     int getNumEvents();
     int clearEvents();
+	long long getThreadEventCount(char* Event, int tid);
     void printEventCountsPerUnit(int reduce, int perunit);
     void printEventCounts(int reduce);
-    void gblAccum();
 
     void setNumThreads(int num_threads);
     int initThreadSet(int tid);
     int startThreadSet(int tid);
     int accumThreadSet(int tid);
     int stopThreadSet(int tid);
-    int clearThreadSet();
+    void gblAccum();
+    int deleteThreadSet();
+    void resetThreadCounts();
 
 };
 
