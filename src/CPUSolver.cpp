@@ -301,8 +301,9 @@ void CPUSolver::precomputePrefactors() {
     _polar_weights = new FP_PRECISION[_num_azim*_num_polar];
 
     /* Precompute the total azimuthal weight for tracks at each polar angle */
-    #pragma omp parallel for private (azim_weight) schedule(guided)
+    #pragma omp parallel for private(azim_weight) schedule(guided)
     for (int i=0; i < _num_azim; i++) {
+
         azim_weight = _azim_weights[i];
 
         for (int p=0; p < _num_polar; p++)

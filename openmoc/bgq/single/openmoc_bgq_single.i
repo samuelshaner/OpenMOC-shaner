@@ -1,4 +1,4 @@
-%module openmoc_gnu_single
+%module openmoc_bgq_single
 
 %{
     #define SWIG_FILE_WITH_INIT

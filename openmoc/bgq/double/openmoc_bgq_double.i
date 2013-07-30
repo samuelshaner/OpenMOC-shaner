@@ -1,4 +1,4 @@
-%module openmoc_gnu_single
+%module openmoc_bgq_double
 
 %{
     #define SWIG_FILE_WITH_INIT
@@ -200,5 +200,5 @@
 %include ../../../src/TrackGenerator.h
 %include ../../../src/Universe.h
 
-typedef float FP_PRECISION;
+typedef double FP_PRECISION;
 

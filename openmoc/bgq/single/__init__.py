@@ -1,6 +1,6 @@
 import openmoc
-import _openmoc_bgxlc_single
-from openmoc_bgxlc_single import *
+import _openmoc_bgq_single
+from openmoc_bgq_single import *
 import signal
 
 # Tell Python to recognize CTRL+C and stop the C++ extension module
@@ -11,4 +11,5 @@ setLogLevel(str(openmoc.getLogLevel()))
 setOutputDirectory(openmoc.getOutputDirectory())
 setLogfileName(openmoc.getLogfileName())
 
+options = openmoc.options
 Timer = openmoc.Timer

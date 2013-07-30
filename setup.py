@@ -250,9 +250,9 @@ def customize_compiler(self):
         # If BGXLC is a defined macro and the source is C++, use bgxlc
         elif '-DBGXLC' in pp_opts and os.path.splitext(src)[1] == '.cpp':
             if config.with_ccache:
-                self.set_executable('compiler_so', 'bgxlc++')
+                self.set_executable('compiler_so', 'bgxlc++_r')
             else:
-                self.set_executable('compiler_so', 'bgxlc++')
+                self.set_executable('compiler_so', 'bgxlc++_r')
             postargs = config.compiler_flags['bgxlc']
 
 
@@ -361,8 +361,8 @@ def customize_linker(self):
         # If the linker receives -qmkshrobj as an option, then the objects
         # are build by an IBM compiler
         if '-qmkshrobj' in extra_postargs:
-            self.set_executable('linker_so', 'bgxlc++')
-            self.set_executable('linker_exe', 'bgxlc++')
+            self.set_executable('linker_so', 'bgxlc++_r')
+            self.set_executable('linker_exe', 'bgxlc++_r')
 
         # If the filename for the extension contains cuda, use g++ to link
         if 'cuda' in output_filename:
