@@ -669,10 +669,10 @@ int Cmfd::constructMatrices(){
 	    if (e != g){
 	      col = cell*_num_groups+e;
 	      value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
-	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	      petsc_err = MatSetValues(_A, 1, &col, 1, &row, &value, ADD_VALUES);
 	      col = cell*_num_groups+g;
 	      value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
-	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	      petsc_err = MatSetValues(_A, 1, &col, 1, &row, &value, ADD_VALUES);
 	    }
 	  }
 	}
@@ -761,21 +761,13 @@ int Cmfd::constructMatrices(){
 	/* source term */
 	if (_assemble_M){
 	  for (int g = 0; g < _num_groups; g++){	    
-	    int f = g;
+	    col = cell*_num_groups+g;
+	    value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell];	    
 	    
-	    if (_flux_method == ADJOINT){
-	      g = e;
-	      e = f;
-	    }
-
-	    col = cell*_num_groups+f;
-	    value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell];
-	    petsc_err = MatSetValues(_M, 1, &row, 1,&col, &value, ADD_VALUES);
-	    
-	    if (_flux_method == ADJOINT){
-	      e = g;
-	      g = f;
-	    }
+	    if (_flux_method == PRIMAL)
+	      petsc_err = MatSetValues(_M, 1, &row, 1,&col, &value, ADD_VALUES);
+	    else
+	      petsc_err = MatSetValues(_M, 1, &col, 1,&row, &value, ADD_VALUES);
 	  }
 	}
       }
@@ -996,11 +988,16 @@ Mesh* Cmfd::getMesh(){
 
 /**
  * @brief Set the flux method
- * @param flux_method enum for flux type
+ * @param flux_type char string representing enum for flux type
  */
-void Cmfd::toggleFluxType(fluxType flux_method){
-  _flux_method = flux_method;
+void Cmfd::setFluxType(const char* flux_type){
+
+  if (strcmp("PRIMAL", flux_type) == 0)
+    _flux_method = PRIMAL;
+  else if (strcmp("ADJOINT", flux_type) == 0)
+    _flux_method = ADJOINT;
+  else
+    log_printf(ERROR, "Could not recognize flux type; "
+	       " the options are PRIMAL and ADJOINT");
 }
-
-
 

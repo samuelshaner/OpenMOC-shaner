@@ -109,6 +109,7 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd...')
 
 cmfd = Cmfd(geometry)
+cmfd.setFluxType('ADJOINT')
 cmfd.computeKeff()
 
 log.py_printf('NORMAL', 'k_eff = %f', cmfd.getKeff())
@@ -122,7 +123,7 @@ log.py_printf('NORMAL', 'Plotting data...')
 #plotter.plotMaterials(geometry, gridsize=500)
 #plotter.plotCells(geometry, gridsize=500)
 #plotter.plotFlatSourceRegions(geometry, gridsize=500)
-plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
+#plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
 
 log.py_printf('TITLE', 'Finished')
 

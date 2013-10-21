@@ -139,12 +139,12 @@ public:
   /* set parameters */
   int setMeshCellFlux();
   void assembleM(bool assembleM);
-  void toggleFluxType(fluxType flux_method);
 
   /* set fsr parameters */
   void setFSRMaterials(Material** FSR_materials);
   void setFSRVolumes(FP_PRECISION* FSR_volumes);
   void setFSRFluxes(FP_PRECISION* scalar_flux);
+  void setFluxType(const char* flux_type);
 };
 
 #endif /* CMFD_H_ */
