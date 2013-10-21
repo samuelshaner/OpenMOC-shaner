@@ -103,8 +103,8 @@ void Mesh::initialize(){
   double* old_flux;
   new_flux = new double[_cells_x*_cells_y*_num_groups];
   old_flux = new double[_cells_x*_cells_y*_num_groups];
-  _fluxes.insert(std::pair<std::string, double*>("new_flux", new_flux));
-  _fluxes.insert(std::pair<std::string, double*>("old_flux", old_flux));
+  _fluxes.insert(std::pair<materialState, double*>(CURRENT, new_flux));
+  _fluxes.insert(std::pair<materialState, double*>(PREVIOUS, old_flux));
   
   /* allocate memory for cell widths, heights, and bounds */
   _lengths_x = new double[_cells_x];
@@ -121,7 +121,7 @@ void Mesh::initialize(){
 	    new_flux[(y*_cells_x+x)*_num_groups + g] = 1.0;
 	    old_flux[(y*_cells_x+x)*_num_groups + g] = 1.0;
 	}
-      
+
 	/* allocate memory for fsr vector */
 	std::vector<int> *fsrs = new std::vector<int>;
 	_cell_fsrs.push_back(*fsrs);      
@@ -588,8 +588,8 @@ boundaryType Mesh::getBoundary(int side){
  * @param group energy group
  * @return flux the scalar flux
  **/
-double Mesh::getFlux(int cell_id, int group, std::string flux_name){
-  double* fluxes = _fluxes.find(flux_name)->second;
+double Mesh::getFlux(int cell_id, int group, materialState state){
+  double* fluxes = _fluxes.find(state)->second;
   return fluxes[cell_id*_num_groups + group];
 }
 
@@ -692,6 +692,13 @@ void Mesh::setCellBounds(){
     _bounds_y[y] = _bounds_y[y-1] - _lengths_y[y-1];
     log_printf(DEBUG, "bounds y: %f", _bounds_y[y]);
   }
+  
+  for (int x = 0; x < _cells_x; x++){
+    for (int y = 0; y < _cells_y; y++){
+      _volumes[y*_cells_x+x] = _lengths_x[x] * _lengths_y[y];
+    }
+  }
+
 }
 
 
@@ -728,8 +735,8 @@ void Mesh::setVolume(double volume, int cell_num){
  * @param flux_name name of flux array
  * @return fluxes array of fluxes 
  **/
-double* Mesh::getFluxes(std::string flux_name){
-  return _fluxes.at(flux_name);
+double* Mesh::getFluxes(materialState state){
+  return _fluxes.at(state);
 }
 
 
@@ -803,10 +810,17 @@ void Mesh::initializeMaterials(std::map<int, Material*>* materials, int* fsrs_to
   std::vector<int>::iterator iter;
   
   for (int y = 0; y < _cells_y; y++){
-    for (int x = 0; x < _cells_x; x++)      
-      _materials[y*_cells_x+x] = materials->at(fsrs_to_mats[_cell_fsrs.at(y*_cells_x+x).at(0)])->clone();
+    for (int x = 0; x < _cells_x; x++){
+      if (materials->at(fsrs_to_mats[_cell_fsrs.at(y*_cells_x+x).at(0)])->getType() == BASE){
+	_materials[y*_cells_x+x] = materials->at(fsrs_to_mats[_cell_fsrs.at(y*_cells_x+x).at(0)])->clone();
+      }
+      else{
+	_materials[y*_cells_x+x] = static_cast<FunctionalMaterial*>(materials->at(fsrs_to_mats[_cell_fsrs.at(y*_cells_x+x).at(0)]))->clone();
+      }
+    }
   }
 }
+
 
 
 /**
@@ -902,3 +916,87 @@ double Mesh::getRelaxFactor(){
 solveType Mesh::getSolveType(){
   return _solve_method;
 }
+
+
+void Mesh::createNewFlux(materialState state){
+  double* flux = new double[_cells_x*_cells_y*_num_groups];
+  _fluxes.insert(std::pair<materialState, double*>(state, flux));
+}
+
+
+void Mesh::copyFlux(materialState from_state, materialState to_state){
+
+  double* from_flux = _fluxes.at(from_state);
+  double* to_flux = _fluxes.at(to_state);
+
+  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+    to_flux[i] = from_flux[i];
+
+}
+
+
+double Mesh::getLeakage(materialState state, int group, bool adj_weight){
+
+  double leakage = 0.0;
+  double* flux = _fluxes.at(state);
+  double* adj_flux;
+  if (adj_weight)
+    adj_flux = _fluxes.at(ADJ);
+
+  int cell;
+
+  /* loop over cells on left surface */
+  for (int y = 0; y < _cells_y; y++){
+    cell = y*_cells_x;
+    if (adj_weight)
+      leakage -= (_materials[cell]->getDifHat()[0*_num_groups + group] 
+		  + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
+	* _lengths_y[y] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
+    else
+      leakage -= (_materials[cell]->getDifHat()[0*_num_groups + group] 
+		  + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
+	* _lengths_y[y] * flux[cell*_num_groups+group];
+  }
+
+  /* loop over cells on bottom surface */
+  for (int x = 0; x < _cells_x; x++){
+    cell = (_cells_y-1)*_cells_x+x;
+    if (adj_weight)
+      leakage -= (_materials[cell]->getDifHat()[1*_num_groups + group] 
+		  - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
+	* _lengths_x[x] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
+    else
+      leakage -= (_materials[cell]->getDifHat()[1*_num_groups + group] 
+		  - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
+	* _lengths_x[x] * flux[cell*_num_groups+group];
+  }
+
+  /* loop over cells on right surface */
+  for (int y = 0; y < _cells_y; y++){
+    cell = y*_cells_x + _cells_x-1;
+    if (adj_weight)
+      leakage -= (_materials[cell]->getDifHat()[2*_num_groups + group] 
+		  - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
+	* _lengths_y[y] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
+    else
+      leakage -= (_materials[cell]->getDifHat()[2*_num_groups + group] 
+		  - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
+	* _lengths_y[y] * flux[cell*_num_groups+group];
+  }
+
+  /* loop over cells on top surface */
+  for (int x = 0; x < _cells_x; x++){
+    cell = x;
+    if (adj_weight)
+      leakage -= (_materials[cell]->getDifHat()[3*_num_groups + group] 
+		  + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
+	* _lengths_x[x] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
+    else
+      leakage -= (_materials[cell]->getDifHat()[3*_num_groups + group] 
+		  + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
+	* _lengths_x[x] * flux[cell*_num_groups+group];
+  }
+
+  return leakage;
+}
+

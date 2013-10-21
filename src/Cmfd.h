@@ -46,10 +46,9 @@ enum fluxType {
 	ADJOINT
 };
 
-
 class Cmfd {
 
-private:
+protected:
 
   /* pointer to quadrature object */
   Quadrature* _quad;
@@ -69,12 +68,6 @@ private:
 
   /* source matrix */
   Mat _M;
-
-  /* row insertion arrays */
-  PetscScalar* _A_array;
-  PetscScalar* _M_array;
-  PetscInt* _indices_y_M;
-  PetscInt* _indices_y_A;
 
   /* flux, source, and residual vectors */
   Vec _phi_new;
@@ -125,15 +118,15 @@ public:
   virtual ~Cmfd();
 
   /* worker functions */
-  int constructMatrices();
+  virtual int constructMatrices();
   void computeDs();
   void computeXS();
   void updateMOCFlux();
   double computeDiffCorrect(double d, double h);
-  double computeKeff();
+  virtual double computeKeff();
   int createAMPhi();
   void initializeFSRs();
-  int rescaleFlux();
+  virtual int rescaleFlux();
 
   /* get arrays, values, and objects */
 #ifdef CMFD

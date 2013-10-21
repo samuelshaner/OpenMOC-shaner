@@ -54,20 +54,6 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
  */
 Cmfd::~Cmfd() {
 
-#ifdef CMFD
-  if (_A_array != NULL)
-    delete [] _A_array;
-
-  if (_M_array != NULL)
-    delete [] _M_array;
-
-  if (_indices_y_M != NULL)
-    delete [] _indices_y_M;
-
-  if (_indices_y_A != NULL)
-    delete [] _indices_y_A;
-#endif
-
 }
 
 
@@ -86,18 +72,12 @@ int Cmfd::createAMPhi(){
   PetscInt size1 = _cells_x * _cells_y * _num_groups;
   PetscInt size2 = 4 + _num_groups;
   
-  /* Create _A (loss) matrix, _A_array array to pre-store matrix values,
-   * and _indices_y_A to store indices of matrix elements */
+  /* Create _A (loss) matrix */
   petsc_err = MatCreateSeqAIJ(PETSC_COMM_WORLD, size1, size1, size2, PETSC_NULL, &_A);
-  _A_array = new PetscScalar[size2];
-  _indices_y_A = new PetscInt[size2];
-  
-  /* Create _M (gain) matrix, _M_array array to pre-store matrix values,
-   * and _indices_y_M to store indices of matrix elements */
+
+  /* Create _M (gain) matrix */
   size2 = size2 - 4;
   petsc_err = MatCreateSeqAIJ(PETSC_COMM_WORLD, size1, size1, size2, PETSC_NULL, &_M);
-  _M_array = new PetscScalar[size2];
-  _indices_y_M = new PetscInt[size2];
   
   /* Create flux, source, and residual vectors */
   petsc_err = VecCreateSeq(PETSC_COMM_WORLD, _cells_x*_cells_y*_num_groups, &_phi_new);
@@ -128,10 +108,10 @@ void Cmfd::computeXS(){
     _mesh->splitCorners();
   
   /* initialize variables for FSR properties*/
-  double volume, flux, abs, tot, nu_fis, chi, buckle, dif_coef;
+  double volume, flux, abs, tot, nu_fis, chi, dif_coef;
   double* scat;
   Material** materials = _mesh->getMaterials();
-  double* fluxes = _mesh->getFluxes("old_flux");
+  double* fluxes = _mesh->getFluxes(PREVIOUS);
   
   /* initialize tallies for each parameter */
   double abs_tally, nu_fis_tally, dif_tally, rxn_tally, vol_tally, tot_tally;
@@ -174,7 +154,6 @@ void Cmfd::computeXS(){
 	abs = fsr_material->getSigmaA()[e];
 	tot = fsr_material->getSigmaT()[e];
 	scat = fsr_material->getSigmaS();
-	buckle = fsr_material->getBuckling()[e];
 	dif_coef = fsr_material->getDifCoef()[e];
 
 	/* if material has a diffusion coefficient, use it; otherwise
@@ -204,7 +183,7 @@ void Cmfd::computeXS(){
 	rxn_tally += flux * volume;
 	vol_tally += volume;
 	for (int g = 0; g < _num_groups; g++)
-	  scat_tally[g] += scat[g*_num_groups + e] * flux * volume;
+	  scat_tally[g] += scat[e*_num_groups + g] * flux * volume;
 	
 	/* choose a chi for this group */
 	if (chi >= cell_material->getChi()[e])
@@ -217,9 +196,7 @@ void Cmfd::computeXS(){
       cell_material->setSigmaTByGroup(tot_tally / rxn_tally, e);
       cell_material->setNuSigmaFByGroup(nu_fis_tally / rxn_tally, e);
       cell_material->setDifCoefByGroup(dif_tally / rxn_tally, e);
-      fluxes[i*_num_groups+e] = rxn_tally / vol_tally;
-      cell_material->setBucklingByGroup(buckle, e);      
-      
+      fluxes[i*_num_groups+e] = rxn_tally / vol_tally;      
 
       log_printf(DEBUG, "cell: %i, group: %i, vol: %f, siga: %f, sigt: %f, nu_sigf: %f, dif_coef: %f, flux: %f", i, e, vol_tally, abs_tally / rxn_tally, 
 		 tot_tally / rxn_tally, nu_fis_tally / rxn_tally, dif_tally / rxn_tally, rxn_tally / vol_tally);
@@ -252,7 +229,7 @@ void Cmfd::computeDs(){
   int cell, cell_next;
 
   Material** materials = _mesh->getMaterials();
-  double* cell_flux = _mesh->getFluxes("old_flux");
+  double* cell_flux = _mesh->getFluxes(PREVIOUS);
   double* lengths_y = _mesh->getLengthsY();
   double* lengths_x = _mesh->getLengthsX();
   double* currents = _mesh->getCurrents();
@@ -313,14 +290,18 @@ void Cmfd::computeDs(){
 	      
 	      /* set d's */
 	      d_hat =  2 * d*f / length_perpen / (1 + 4 * d*f / length_perpen);
-	      d_tilde = (sense * d_hat * flux - current / length) / flux;
+
+	      if (_mesh->getSolveType() == MOC)
+		d_tilde = (sense * d_hat * flux - current / length) / flux;
+	      else
+		d_tilde = 0.0;
 	    }
 	    /* ZERO_FLUX BC */
 	    else if (_mesh->getBoundary(surface) == ZERO_FLUX){
 
 	      /* set d's */
 	      d_hat = 2 * d*f / length_perpen;
-	      d_tilde = (sense * d_hat * flux - current / length) / flux;
+	      d_tilde = 0.0;
 	    }
 	  }
 	  /* if surface is an interface, use finite differencing */
@@ -359,8 +340,11 @@ void Cmfd::computeDs(){
 	      - sense * currents[cell_next*_num_groups*8 + next_surface*_num_groups + e];
 	    
 	    /* compute d_tilde */
-	    d_tilde = -(sense * d_hat * (flux_next - flux) + current  / length) / (flux_next + flux);
-	  
+	    if (_solve_method == MOC)
+	      d_tilde = -(sense * d_hat * (flux_next - flux) + current  / length) / (flux_next + flux);
+	    else
+	      d_tilde = 0.0;
+
 	    /* if the magnitude of d_tilde is greater than the magnitude of d_hat,
 	     * select new values d_tilde and d_hat to ensure the course mesh equations
 	     * are guaranteed to be diagonally dominant */
@@ -435,11 +419,14 @@ double Cmfd::computeKeff(){
 
   /* compute the cross sections and surface 
    * diffusion coefficients */
-  computeXS();
+  if (_solve_method == MOC)
+    computeXS();
+  
   computeDs();
 
   /* assemble matrices and flux vector */  
   petsc_err = MatZeroEntries(_A);
+  
   if (_assemble_M)
     petsc_err = MatZeroEntries(_M);
     
@@ -533,6 +520,9 @@ double Cmfd::computeKeff(){
       break;
   }
 
+  /* destroy KSP object */
+  petsc_err = KSPDestroy(&ksp);
+
   /* rescale the old and new flux */
   petsc_err = rescaleFlux();
 
@@ -606,8 +596,8 @@ int Cmfd::setMeshCellFlux(){
   
   for (int i = 0; i < _cells_x*_cells_y; i++){
     for (int e = 0; e < _num_groups; e++){
-      _mesh->getFluxes("new_flux")[i*_num_groups + e] = double(new_phi[i*_num_groups + e]);
-      _mesh->getFluxes("old_flux")[i*_num_groups + e] = double(old_phi[i*_num_groups + e]);
+      _mesh->getFluxes(CURRENT)[i*_num_groups + e] = double(new_phi[i*_num_groups + e]);
+      _mesh->getFluxes(PREVIOUS)[i*_num_groups + e] = double(old_phi[i*_num_groups + e]);
     }
   }
   
@@ -631,13 +621,13 @@ int Cmfd::constructMatrices(){
   int petsc_err = 0;
 
 #ifdef CMFD
-  PetscInt indice_x;
-  PetscScalar value, phi, b_prime = 0;
+  PetscScalar value;
   int cell;
+  PetscInt row, col;
 
   /* get arrays */
   Material** materials = _mesh->getMaterials();
-  double* old_flux = _mesh->getFluxes("old_flux");
+  double* old_flux = _mesh->getFluxes(PREVIOUS);
   double* heights = _mesh->getLengthsY();
   double* widths = _mesh->getLengthsX();
   
@@ -649,62 +639,40 @@ int Cmfd::constructMatrices(){
       
       /* loop over groups */
       for (int e = 0; e < _num_groups; e++){
-	
-	/* zero row insertion arrays */
-	for (int g = 0; g < _num_groups; g++){
-	  _M_array[g] = 0.0;
-	  _indices_y_A[g+2] = (y*_cells_x + x)*_num_groups+g;
-	  _indices_y_M[g] = (y*_cells_x + x)*_num_groups+g;
-	}
-	for (int f = 0; f < _num_groups+4; f++){
-	  _A_array[f] = 0.0;
-	}
-	
-	indice_x = (y*_cells_x + x)*_num_groups+e;
-	if (x != 0)
-	  _indices_y_A[0] = (y*_cells_x + x-1)*_num_groups+e;
-	else
-	  _indices_y_A[0] = -1;
-	
-	if (y != _cells_y - 1)
-	  _indices_y_A[1] = ((y+1)*_cells_x + x)*_num_groups+e;
-	else
-	  _indices_y_A[1] = -1;
-	
-	if (x != _cells_x-1)
-	  _indices_y_A[_num_groups+2] = (y*_cells_x + x+1)*_num_groups+e;
-	else
-	  _indices_y_A[_num_groups+2] = -1;
-	
-	if (y != 0)
-	  _indices_y_A[_num_groups+3] = ((y-1)*_cells_x + x)*_num_groups+e;
-	else
-	  _indices_y_A[_num_groups+3] = -1;
 
+	row = cell*_num_groups + e;
+	
 	/* flux */
-	phi = old_flux[cell*_num_groups + e];
+	value = old_flux[cell*_num_groups+e];
+	petsc_err = VecSetValue(_phi_old, row, value, INSERT_VALUES);
 
 	/* absorption term */
-	_A_array[2 + e] += materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
+	value = materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
+	col = cell*_num_groups + e;
+	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 
-	/* buckling */
-	if (materials[cell]->getBuckling() != NULL)
-	  _A_array[2 + e] += materials[cell]->getDifCoef()[e] * materials[cell]->getBuckling()[e] * _mesh->getVolumes()[cell];;
-
-	/* in (1st) and out (2nd) scattering */
+	/* out (1st) and in (2nd) scattering */
 	if (_flux_method == PRIMAL){
 	  for (int g = 0; g < _num_groups; g++){
 	    if (e != g){
-	      _A_array[2 + e] += materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
-	      _A_array[2 + g] -= materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
+	      col = cell*_num_groups+e;
+	      value = materials[cell]->getSigmaS()[g*_num_groups+e] * _mesh->getVolumes()[cell]; 
+	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	      col = cell*_num_groups+g;
+	      value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
+	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	    }
 	  }
 	}
 	else{
 	  for (int g = 0; g < _num_groups; g++){
 	    if (e != g){
-	      _A_array[2 + e] += materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
-	      _A_array[2 + g] -= materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
+	      col = cell*_num_groups+e;
+	      value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
+	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	      col = cell*_num_groups+g;
+	      value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
+	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	    }
 	  }
 	}
@@ -712,58 +680,82 @@ int Cmfd::constructMatrices(){
 	/* RIGHT SURFACE */
        
 	/* set transport term on diagonal */
-	_A_array[2 + e] += (materials[cell]->getDifHat()[2*_num_groups + e] 
+
+	value = (materials[cell]->getDifHat()[2*_num_groups + e] 
 			    - materials[cell]->getDifTilde()[2*_num_groups + e]) 
 	                    * heights[cell / _cells_x];
+
+	col = cell*_num_groups+e;
+	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	
 	/* set transport term on off diagonal */
 	if (x != _cells_x - 1){
-	  _A_array[2 + _num_groups] =- (materials[cell]->getDifHat()[2*_num_groups + e] 
+	  value = - (materials[cell]->getDifHat()[2*_num_groups + e] 
 					+ materials[cell]->getDifTilde()[2*_num_groups + e]) 
 	                                * heights[cell / _cells_x];
+
+	  col = (cell+1)*_num_groups+e;
+	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	}
 
 	/* LEFT SURFACE */
 	
 	/* set transport term on diagonal */
-	_A_array[2 + e] += (materials[cell]->getDifHat()[0*_num_groups + e] 
+	value = (materials[cell]->getDifHat()[0*_num_groups + e] 
 			    + materials[cell]->getDifTilde()[0*_num_groups + e]) 
 	                    * heights[cell / _cells_x];
-	
+
+	col = cell*_num_groups+e;	
+	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	
 	/* set transport term on off diagonal */
 	if (x != 0){
-	    _A_array[0] -= (materials[cell]->getDifHat()[0*_num_groups + e] 
+	    value = - (materials[cell]->getDifHat()[0*_num_groups + e] 
 			    - materials[cell]->getDifTilde()[0*_num_groups + e]) 
 	                    * heights[cell / _cells_x];
+
+	  col = (cell-1)*_num_groups+e;
+	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	}
 	
 	/* BOTTOM SURFACE */
 	
 	/* set transport term on diagonal */
-	_A_array[2 + e] += (materials[cell]->getDifHat()[1*_num_groups + e] 
+	value = (materials[cell]->getDifHat()[1*_num_groups + e] 
 			    - materials[cell]->getDifTilde()[1*_num_groups + e]) 
 	                    * widths[cell % _cells_x];
+
+	col = cell*_num_groups+e;
+	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
        
 	/* set transport term on off diagonal */
 	if (y != _cells_y - 1){
-	  _A_array[1] -= (materials[cell]->getDifHat()[1*_num_groups + e] 
+	  value = - (materials[cell]->getDifHat()[1*_num_groups + e] 
 			  + materials[cell]->getDifTilde()[1*_num_groups + e]) 
 	                  * widths[cell % _cells_x];
+
+	  col = (cell+_cells_x)*_num_groups+e;
+	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	}
 	
 	/* TOP SURFACE */
 	
 	/* set transport term on diagonal */
-	_A_array[2 + e] += (materials[cell]->getDifHat()[3*_num_groups + e] 
+        value = (materials[cell]->getDifHat()[3*_num_groups + e] 
 			    + materials[cell]->getDifTilde()[3*_num_groups + e]) 
 	                    * widths[cell % _cells_x];
+
+	col = cell*_num_groups+e;
+	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	
 	/* set transport term on off diagonal */
 	if (y != 0){
-	  _A_array[3 + _num_groups] -= (materials[cell]->getDifHat()[3*_num_groups + e] 
+	  value = - (materials[cell]->getDifHat()[3*_num_groups + e] 
 					- materials[cell]->getDifTilde()[3*_num_groups + e]) 
 	                                * widths[cell % _cells_x];
+
+	  col = (cell-_cells_x)*_num_groups+e;
+	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
 	}
 
 	/* source term */
@@ -775,8 +767,10 @@ int Cmfd::constructMatrices(){
 	      g = e;
 	      e = f;
 	    }
-	    
-	    _M_array[f] += materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell];
+
+	    col = cell*_num_groups+f;
+	    value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell];
+	    petsc_err = MatSetValues(_M, 1, &row, 1,&col, &value, ADD_VALUES);
 	    
 	    if (_flux_method == ADJOINT){
 	      e = g;
@@ -784,23 +778,6 @@ int Cmfd::constructMatrices(){
 	    }
 	  }
 	}
-	
-	/* insert row arrays into matrix */
-	if (_assemble_M){
-	  petsc_err = MatSetValues(_M,1,&indice_x,_num_groups,_indices_y_M,_M_array,INSERT_VALUES);
-	  CHKERRQ(petsc_err);
-	}
-
-	log_printf(DEBUG, "cell: %i, group: %i, A0: %f, A1: %f, A2: %f, A3: %f, A4: %f, A5: %f", cell, e,
-		   _A_array[0], _A_array[1], _A_array[2], _A_array[3], _A_array[4], _A_array[5]);  
-
-
-	petsc_err = MatSetValues(_A,1,&indice_x,_num_groups+4,_indices_y_A,_A_array,INSERT_VALUES);
-	CHKERRQ(petsc_err);
-	
-	petsc_err = VecSetValue(_phi_old, indice_x, phi, INSERT_VALUES);
-	CHKERRQ(petsc_err);
-	
       }
     }
   }
@@ -822,8 +799,8 @@ void Cmfd::updateMOCFlux(){
   
   /* initialize variables */
   std::vector<int>::iterator iter;
-  double* old_flux = _mesh->getFluxes("old_flux");
-  double* new_flux = _mesh->getFluxes("new_flux");
+  double* old_flux = _mesh->getFluxes(PREVIOUS);
+  double* new_flux = _mesh->getFluxes(CURRENT);
   double old_cell_flux, new_cell_flux;
   
   /* loop over mesh cells */

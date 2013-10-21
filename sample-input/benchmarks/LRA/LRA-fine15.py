@@ -9,7 +9,7 @@ import openmoc.materialize as materialize
 
 tolerance = options.tolerance
 relax_factor = options.relax_factor
-log.setLogLevel('NORMAL')
+log.setLogLevel('INFO')
 
 ###############################################################################
 ###########################   Creating Materials   ############################

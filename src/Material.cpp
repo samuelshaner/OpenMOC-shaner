@@ -31,6 +31,7 @@ Material::Material(short int id) {
     _uid = _n;
     _id = id;
     _n++;
+    _type = BASE;
 
     _sigma_t = NULL;
     _sigma_a = NULL;
@@ -44,8 +45,12 @@ Material::Material(short int id) {
     _buckling = NULL;
 
     _fissionable = false;
-
     _data_aligned = false;
+    
+    _temperature = new double[6];
+    
+    for (int i = 0; i < 6; i++)
+      _temperature[i] = 300.0;
 
     return;
 }
@@ -195,6 +200,7 @@ double* Material::getSigmaS() {
  * @return the pointer to the material's array of fission cross-sections
  */
 double* Material::getSigmaF() {
+
     if (_sigma_f == NULL)
         log_printf(ERROR, "Unable to return material %d's fission "
                         "cross-section since it has not yet been set", _id);
@@ -276,7 +282,6 @@ double* Material::getDifTilde() {
     for (int e = 0; e < 4*_num_groups; e++)
       _dif_tilde[e] = 0.0;
   }
-
 
     return _dif_tilde;
 }
@@ -398,7 +403,6 @@ void Material::setNumEnergyGroups(const int num_groups) {
 	    delete [] _buckling;
     }
 
-
     _sigma_t = new double[_num_groups];
     _sigma_a = new double[_num_groups];
     _sigma_f = new double[_num_groups];
@@ -451,8 +455,12 @@ void Material::setSigmaA(double* xs, int num_groups) {
                  "%d which contains %d energy groups", num_groups,
                  _num_groups);
 
-    for (int i=0; i < _num_groups; i++)
-        _sigma_a[i] = xs[i];
+    for (int i = 0; i < _num_groups; i++){
+      _sigma_a[i] = xs[i];
+      
+      if (_buckling != NULL && _dif_coef != NULL)
+        _sigma_a[i] += _buckling[i] * _dif_coef[i];
+    }
 }
 
 
@@ -491,10 +499,10 @@ void Material::setSigmaS(double* xs, int num_groups_squared) {
 		   float(sqrt(num_groups_squared)), _num_groups);
 
     for (int i=0; i < _num_groups; i++) {
-        for (int j=0; j < _num_groups; j++)
-            _sigma_s[j*_num_groups+i] = xs[i*_num_groups+j];
+      for (int j=0; j < _num_groups; j++){
+	_sigma_s[j*_num_groups+i] = xs[i*_num_groups+j];
+      }   
     }
-    
 }
 
 
@@ -711,33 +719,7 @@ void Material::setBucklingByGroup(double xs, int group) {
         		" for material %d which contains %d energy groups",
 		   group, _num_groups, _uid);
 
-    if (_buckling == NULL){
-      _buckling = new double[_num_groups];
-      for (int i=0; i < _num_groups; i++)
-        _buckling[i] = 0.0;
-    }
-
     _buckling[group] = xs;
-}
-
-
-/**
- * @brief Set the material's array of diffusion coefficients.
- * @param xs the array of diffusion coefficents
- * @param num_groups the number of energy groups
- */
-void Material::setDifHat(double* xs, int num_groups) {
-
-    if (_num_groups != num_groups)
-      log_printf(ERROR, "Unable to set diffusion coefficient with %d groups "
-    		  "for material %d which contains %d energy groups", num_groups,
-                 _num_groups);
-
-    if (_dif_hat == NULL)
-      _dif_hat = new double[4*_num_groups];
-
-    for (int i=0; i < _num_groups*4; i++)
-        _dif_hat[i] = xs[i];
 }
 
 
@@ -762,26 +744,6 @@ void Material::setDifHatByGroup(double xs, int group, int surface) {
     _dif_hat[surface*_num_groups + group] = xs;
 }
 
-
-/**
- * @brief Set the material's array of diffusion coefficients.
- * @param xs the array of diffusion coefficents
- * @param num_groups the number of energy groups
- */
-void Material::setDifTilde(double* xs, int num_groups) {
-
-    if (_num_groups != num_groups)
-      log_printf(ERROR, "Unable to set diffusion coefficient with %d groups "
-    		  "for material %d which contains %d energy groups", num_groups,
-                 _num_groups);
-
-    if (_dif_tilde == NULL){
-      _dif_tilde = new double[4*_num_groups];
-    }
-
-    for (int i=0; i < _num_groups*4; i++)
-        _dif_tilde[i] = xs[i];
-}
 
 
 /**
@@ -1036,10 +998,14 @@ Material* Material::clone(){
     material_clone->setBuckling(_buckling, _num_groups);  
 
   if (_dif_hat != NULL)
-    material_clone->setDifHat(_dif_hat, _num_groups);  
+    for (int i = 0; i < _num_groups; i++)
+      for (int s = 0; s < 4; s++)
+	material_clone->setDifHatByGroup(_dif_hat[s*_num_groups+i], i, s);  
 
   if (_dif_tilde != NULL)
-    material_clone->setDifTilde(_dif_tilde, _num_groups);  
+    for (int i = 0; i < _num_groups; i++)
+      for (int s = 0; s < 4; s++)
+	material_clone->setDifTildeByGroup(_dif_tilde[s*_num_groups+i], i, s);  
 
   copySigmaS(material_clone);
 
@@ -1057,14 +1023,43 @@ void Material::copySigmaS(Material* material){
   }
 }
 
+void Material::setTemperature(double temperature){
+
+  _temperature[0] = temperature;
+  _temperature[1] = temperature;
+  _temperature[2] = temperature;
+  _temperature[3] = temperature;
+  _temperature[4] = temperature;
+  _temperature[5] = temperature;
+}
 
 
+void Material::setTemperatureByState(materialState state, double temperature){
+  _temperature[(int)state] = temperature;
+}
 
 
+double Material::getTemperature(){
+  return _temperature[(int)CURRENT];
+}
 
 
+double Material::getTemperatureByState(materialState state){
+  return _temperature[(int)state];
+}
 
+void Material::copyTemperature(double* temp){
 
+  log_printf(DEBUG, "temperature 5: %f", temp[5]);
 
+  _temperature[0] = temp[0];
+  _temperature[1] = temp[1];
+  _temperature[2] = temp[2];
+  _temperature[3] = temp[3];
+  _temperature[4] = temp[4];
+  _temperature[5] = temp[5];
+}
 
-
+materialType Material::getType(){
+  return _type;
+}

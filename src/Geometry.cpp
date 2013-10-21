@@ -1575,7 +1575,7 @@ void Geometry::initializeMesh(){
     }
 
     /* Decide whether optically thick correction factor is needed for MOC acceleration */
-    if (getHeight()*getWidth() / (height*width) >= 10.0){
+    if (getHeight()*getWidth() / (height*width) >= 10.0 && _mesh->getSolveType() == MOC){
       _mesh->setOpticallyThick(true);
       log_printf(INFO, "Optically thick correction factor turned on and for cmfd "
 		 "acceleration because the average mesh cell size is >= 10 cm^2");
@@ -1596,6 +1596,8 @@ void Geometry::initializeMesh(){
     _mesh->setFSRBounds();
     _mesh->setCellBounds();
     _mesh->initializeMaterials(&_materials, _FSRs_to_materials_id);
+
+    log_printf(INFO, "Done defining mesh");
 
     return;
 }

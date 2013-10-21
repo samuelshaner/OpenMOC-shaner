@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "log.h"
+#include "TimeStepper.h"
 #endif
 
 #ifndef ICPC
@@ -27,9 +28,16 @@
  */
 #define SIGMA_T_THRESH 1E-3
 
+/**
+ * Material types
+ */
+enum materialType {
+	BASE,
+	FUNCTIONAL
+};
+
 
 int material_id();
-
 
 /**
  * @class Material Material.h "openmoc/src/host/Material.h"
@@ -38,7 +46,7 @@ int material_id();
  */
 class Material {
 
-private:
+protected:
 
     /** A static counter for the number of materials in a simulation */
     static int _n;
@@ -94,8 +102,14 @@ private:
      * allocated to be vector aligned for SIMD instructions */
     bool _data_aligned;
 
+    /** The material type, BASE or FUNCTIONAL */
+    materialType _type;
+
     /** The number of vector widths needed to fit all energy groups */
     int _num_vector_groups;
+
+    /** The material temperature */
+    double* _temperature;
 
 public:
     Material(short int id);
@@ -118,17 +132,15 @@ public:
     bool isDataAligned();
     int getNumVectorGroups();
 
-    void setNumEnergyGroups(const int num_groups);
+    virtual void setNumEnergyGroups(const int num_groups);
     void setSigmaT(double* xs, int num_groups);
-    void setSigmaA(double* xs, int num_groups);
+    virtual void setSigmaA(double* xs, int num_groups);
     void setSigmaS(double* xs, int num_groups);
     void setSigmaF(double* xs, int num_groups);
     void setNuSigmaF(double* xs, int num_groups);
     void setChi(double* xs, int num_groups);
     void setBuckling(double* xs, int num_groups);
     void setDifCoef(double* xs, int num_groups);
-    void setDifHat(double* xs, int num_groups);
-    void setDifTilde(double* xs, int num_groups);
     
     void setSigmaTByGroup(double xs, int group);
     void setSigmaAByGroup(double xs, int group);
@@ -141,16 +153,23 @@ public:
     void setDifHatByGroup(double xs, int group, int surface);
     void setDifTildeByGroup(double xs, int group, int surface);
 
-
     void checkSigmaT();
     std::string toString();
     void printString();
 
-    void alignData();
-    
-    Material* clone();
-    void copySigmaS(Material* material);
+    void alignData();    
+    virtual Material* clone();
 
+    void setTemperature(double temp);
+    double getTemperature();
+    void copyTemperature(double* temp);
+
+    /* get and set temperature */
+    void setTemperatureByState(materialState state, double temp);
+    double getTemperatureByState(materialState state);
+
+    materialType getType();
+    void copySigmaS(Material* material);
 };
 
 

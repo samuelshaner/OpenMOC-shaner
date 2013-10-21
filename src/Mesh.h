@@ -18,7 +18,7 @@
 #include "log.h"
 #include "LocalCoords.h"
 #include "Surface.h"
-#include "Material.h"
+#include "FunctionalMaterial.h"
 
 /**
  * Solve types
@@ -75,7 +75,7 @@ private:
   double _relax_factor;
 
   /* map of fluxes mapped onto mesh */
-  std::map<std::string, double*> _fluxes;
+  std::map<materialState, double*> _fluxes;
 
   /* materials array */
   Material** _materials;
@@ -113,11 +113,11 @@ public:
   int getNumCells();
   boundaryType getBoundary(int side);
   int getNumCurrents();
-  double getFlux(int cell_id, int group, std::string flux_name="new_flux");
+  double getFlux(int cell_id, int group, materialState state=CURRENT);
   std::vector<std::vector<int> >* getCellFSRs();
   Material** getMaterials();
   double* getVolumes();
-  double* getFluxes(std::string flux_name);
+  double* getFluxes(materialState state);
   double* getLengthsX();
   double* getLengthsY();
   double* getCurrents();
@@ -161,6 +161,10 @@ public:
   int findCellId(LocalCoords* coord);
   void initializeMaterials(std::map<int, Material*>* materials, int* fsrs_to_mats);
   void initializeSurfaceCurrents();
+  void createNewFlux(materialState state);
+  void copyFlux(materialState from_state, materialState to_state);
+  double getLeakage(materialState state, int group, bool adj_weight);
+
 };
 
 #endif /* MESH_H_ */

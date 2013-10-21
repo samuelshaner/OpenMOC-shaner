@@ -19,6 +19,10 @@
     #include "../src/Universe.h"
     #include "../src/Cmfd.h"
     #include "../src/Mesh.h"
+    #include "../src/CmfdTransient.h"
+    #include "../src/TransientSolver.h"
+    #include "../src/FunctionalMaterial.h"
+    #include "../src/TimeStepper.h"
 
     #define printf PySys_WriteStdout
 
@@ -118,6 +122,86 @@
     }
 }
 
+/* Typemap for FunctionalMaterial::setSigmaATime(double* xs, int num_time_steps, int num_groups) 
+ * method - allows users to pass in Python lists of xs for each time step */
+%typemap(in) (double* xs, int num_time_steps, int num_groups) {
+
+    if (!PyList_Check($input)) {
+        PyErr_SetString(PyExc_ValueError,"Expected a Python list of doubles "
+			"for the cross sections");
+	return NULL;
+    }
+
+    $2 = PySequence_Length($input);  // num_time_steps
+    $3 = PySequence_Length(PyList_GetItem($input,0)); // num_groups
+    $1 = (double*) malloc(($2 * $3) * sizeof(double));  // xs
+
+    /* Loop over time steps */
+    for (int i = 0; i < $2; i++) {
+
+      /* Get the inner list in the nested xs lists */
+        PyObject* outer_list = PySequence_GetItem($input,i);
+
+	/* Check that the length of this list is the same as the length
+	 * of the first list */
+	if (PySequence_Length(outer_list) != $3) {
+	    PyErr_SetString(PyExc_ValueError, "Size mismatch. Expected $2 x $3 "
+			    "elements for xs\n");
+	    return NULL;
+	}
+
+	/* Loop over groups */
+        for (int j =0; j < $3; j++) {
+
+	    /* Extract the value from the list at this location */
+	    PyObject *o = PySequence_GetItem(outer_list,j);
+
+	    /* If the value is a number, cast it as an int and set the
+	     * input array value */
+	    if (PyNumber_Check(o)) {
+	        $1[i*$3 + j] = (double) PyFloat_AsDouble(o);
+	    } 
+	    else {
+	        free($1);
+	        PyErr_SetString(PyExc_ValueError,"Expected a list of numbers "
+				"xs values\n");
+		return NULL;
+	    }
+	}
+    }
+}
+
+%typemap(in) (double* time, int num_time_steps) {
+
+    if (!PyList_Check($input)) {
+        PyErr_SetString(PyExc_ValueError,"Expected a Python list of values "
+			"for the time array");
+	return NULL;
+    }
+
+    $2 = PySequence_Length($input);  // num_time_steps
+    $1 = (double*) malloc($2 * sizeof(double));  // time array
+
+    /* Loop over x */
+    for (int i = 0; i < $2; i++) {
+
+	/* Extract the value from the list at this location */
+	PyObject *o = PySequence_GetItem($input,i);
+
+	/* If the value is a number, cast it as an int and set the
+	 * input array value */
+	if (PyNumber_Check(o)) {
+	    $1[i] = (double) PyFloat_AsDouble(o);
+	} 
+	else {
+	  free($1);
+	  PyErr_SetString(PyExc_ValueError,"Expected a list of numbers "
+			  "as time values\n");
+	  return NULL;
+	}
+    }
+}
+
 
 /* Typemap for Lattice::setLatticeCells(int num_x, int num_y, int* universes) 
  * method - allows users to pass in Python lists of Universe IDs for each 
@@ -194,6 +278,14 @@
  * using NumPy arrays */
 %apply (double* IN_ARRAY1, int DIM1) {(double* xs, int num_groups)}
 
+/* The typemap used to match the method signature for the Material 
+ * time dependent cross section setter methods. This allows users to 
+ * set the cross-sections using NumPy arrays */
+%apply (double* IN_ARRAY1, int DIM1) {(double* time, int num_time_steps)}
+
+
+%apply (int DIM1, int DIM2, double* IN_ARRAY2) {(int num_time_steps, int num_groups, double* xs)}
+
 /* The typemap used to match the method signature for the TrackGenerator's
  * getter methods for track start and end coordinates for the plotting 
  * routines in openmoc.plotter */
@@ -212,6 +304,11 @@
 /* The typemap used to match the method signature for the Universe's
  * getCellIds method for the data processing routines in openmoc.process */
 %apply (int* ARGOUT_ARRAY1, int DIM1) {(int* cell_ids, int num_cells)}
+
+%apply (double* IN_ARRAY1, int DIM1) {(double* beta, int num_delay_groups)}
+%apply (double* IN_ARRAY1, int DIM1) {(double* decay_const, int num_delay_groups)}
+%apply (double* IN_ARRAY1, int DIM1) {(double* velocity, int num_groups)}
+%apply (double* IN_ARRAY1, int DIM1) {(double* gamma, int num_groups)}
 
 #endif
 
@@ -234,6 +331,11 @@
 %include ../src/Universe.h
 %include ../src/Cmfd.h
 %include ../src/Mesh.h
+%include ../src/CmfdTransient.h
+%include ../src/TimeStepper.h
+%include ../src/TransientSolver.h
+%include ../src/FunctionalMaterial.h
+
 
 #ifdef CMFD
 #define CMFD true

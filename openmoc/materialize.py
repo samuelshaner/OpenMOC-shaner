@@ -67,6 +67,12 @@ def materialize(filename):
 
             if 'Total XS' in f[name]:
                 new_material.setSigmaT(f[name]['Total XS'][...])
+
+            if 'Diffusion Coefficient' in f[name]:
+                new_material.setDifCoef(f[name]['Diffusion Coefficient'][...])
+
+            if 'Buckling' in f[name]:
+                new_material.setBuckling(f[name]['Buckling'][...])
             
             if 'Absorption XS' in f[name]:
                 new_material.setSigmaA(f[name]['Absorption XS'][...])
@@ -82,12 +88,6 @@ def materialize(filename):
             
             if 'Chi' in f[name]:
                 new_material.setChi(f[name]['Chi'][...])
-
-            if 'Diffusion Coefficient' in f[name]:
-                new_material.setDifCoef(f[name]['Diffusion Coefficient'][...])
-
-            if 'Buckling' in f[name]:
-                new_material.setBuckling(f[name]['Buckling'][...])
 
             # Add this material to the list
             materials[name] = new_material
@@ -123,15 +123,48 @@ def materialize(filename):
 
             py_printf('INFO', 'Importing material %s', str(name))
 
-            new_material = Material(material_id())
-            new_material.setNumEnergyGroups(int(num_groups))
+            # create material object
+            if 'FunctionalVariables' in data[name].keys():
+                new_material = FunctionalMaterial(material_id())
+                
+                if 'Time' in data[name]['FunctionalVariables']:
+                    new_material.setNumEnergyGroups(int(num_groups), int(len(data[name]['Time'])))
+                else:
+                    new_material.setNumEnergyGroups(int(num_groups), 1)
+            else:
+                new_material = Material(material_id())
+                new_material.setNumEnergyGroups(int(num_groups))
+            
+            if 'Diffusion Coefficient' in data[name].keys():
+                new_material.setDifCoef(data[name]['Diffusion Coefficient'])
+
+            if 'Buckling' in data[name].keys():
+                new_material.setBuckling(data[name]['Buckling'])
+            
+            if 'FunctionalVariables' in data[name].keys():
+                if 'Temperature' in data[name]['FunctionalVariables']:
+                    if 'Absorption XS' in data[name]['FunctionalTemperature']:
+                        new_material.sigmaAFuncTemp(True)
+
+            # set sigmaA and time
+            if 'FunctionalVariables' in data[name].keys():
+                if 'Time' in data[name]['FunctionalVariables']:
+
+                    if 'Time' in data[name].keys():
+                        new_material.setTime(data[name]['Time'])
+                    
+                        if 'Absorption XS' in data[name]['FunctionalTime']:
+                            new_material.sigmaAFuncTime(True)
+                            new_material.setSigmaATime(data[name]['Absorption XS'])
+                else:
+                    new_material.setSigmaA(data[name]['Absorption XS'])
+
+            else:
+                new_material.setSigmaA(data[name]['Absorption XS'])
             
             if 'Total XS' in data[name].keys():
                 new_material.setSigmaT(data[name]['Total XS'])
                 
-            if 'Absorption XS' in data[name].keys():
-                new_material.setSigmaA(data[name]['Absorption XS'])
-                    
             if 'Scattering XS' in data[name].keys():
                 new_material.setSigmaS(data[name]['Scattering XS'])
 
@@ -143,13 +176,11 @@ def materialize(filename):
 
             if 'Chi' in data[name].keys():
                 new_material.setChi(data[name]['Chi'])
+            
+            if 'Gamma' in data[name].keys():
+                new_material.setGamma(data[name]['Gamma'])
+
               
-            if 'Diffusion Coefficient' in data[name].keys():
-                new_material.setDifCoef(data[name]['Diffusion Coefficient'])
-
-            if 'Buckling' in data[name].keys():
-                new_material.setBuckling(data[name]['Buckling'])
-
             # Add this material to the list
             materials[name] = new_material
 

@@ -187,7 +187,11 @@ class configuration:
                       'src/TrackGenerator.cpp',
                       'src/Universe.cpp',
                       'src/Cmfd.cpp',
-                      'src/Mesh.cpp']
+                      'src/Mesh.cpp',
+                      'src/CmfdTransient.cpp',
+                      'src/TimeStepper.cpp',
+                      'src/TransientSolver.cpp',
+                      'src/FunctionalMaterial.cpp']
 
     sources['icpc'] = ['openmoc/openmoc_wrap.cpp',
                        'src/Cell.cpp',
