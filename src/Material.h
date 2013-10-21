@@ -160,13 +160,10 @@ public:
     void alignData();    
     virtual Material* clone();
 
-    void setTemperature(double temp);
-    double getTemperature();
-    void copyTemperature(double* temp);
-
-    /* get and set temperature */
-    void setTemperatureByState(materialState state, double temp);
-    double getTemperatureByState(materialState state);
+    void setTemperature(materialState state, double temp);
+    double getTemperature(materialState state);
+    void copyTemperature(materialState state_from, materialState state_to);
+    void initializeTemperature(double temp);
 
     materialType getType();
     void copySigmaS(Material* material);

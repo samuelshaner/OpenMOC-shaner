@@ -1009,6 +1009,13 @@ Material* Material::clone(){
 
   copySigmaS(material_clone);
 
+  material_clone->setTemperature(REFERENCE, getTemperature(REFERENCE));
+  material_clone->setTemperature(PREVIOUS, getTemperature(PREVIOUS));
+  material_clone->setTemperature(PREVIOUS_CONV, getTemperature(PREVIOUS_CONV));
+  material_clone->setTemperature(CURRENT, getTemperature(CURRENT));
+  material_clone->setTemperature(FORWARD, getTemperature(FORWARD));
+  material_clone->setTemperature(ADJ, getTemperature(ADJ));
+
   return material_clone;
 
 }
@@ -1023,7 +1030,7 @@ void Material::copySigmaS(Material* material){
   }
 }
 
-void Material::setTemperature(double temperature){
+void Material::initializeTemperature(double temperature){
 
   _temperature[0] = temperature;
   _temperature[1] = temperature;
@@ -1034,30 +1041,17 @@ void Material::setTemperature(double temperature){
 }
 
 
-void Material::setTemperatureByState(materialState state, double temperature){
+void Material::setTemperature(materialState state, double temperature){
   _temperature[(int)state] = temperature;
 }
 
 
-double Material::getTemperature(){
-  return _temperature[(int)CURRENT];
-}
-
-
-double Material::getTemperatureByState(materialState state){
+double Material::getTemperature(materialState state){
   return _temperature[(int)state];
 }
 
-void Material::copyTemperature(double* temp){
-
-  log_printf(DEBUG, "temperature 5: %f", temp[5]);
-
-  _temperature[0] = temp[0];
-  _temperature[1] = temp[1];
-  _temperature[2] = temp[2];
-  _temperature[3] = temp[3];
-  _temperature[4] = temp[4];
-  _temperature[5] = temp[5];
+void Material::copyTemperature(materialState state_from, materialState state_to){
+  _temperature[(int)state_to] = _temperature[(int)state_from];
 }
 
 materialType Material::getType(){
