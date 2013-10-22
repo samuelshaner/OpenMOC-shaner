@@ -164,6 +164,7 @@ public:
   void createNewFlux(materialState state);
   void copyFlux(materialState from_state, materialState to_state);
   double getLeakage(materialState state, int group, bool adj_weight);
+  void dumpFlux(materialState state);
 
 };
 

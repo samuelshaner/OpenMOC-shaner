@@ -945,58 +945,114 @@ double Mesh::getLeakage(materialState state, int group, bool adj_weight){
 
   int cell;
 
-  /* loop over cells on left surface */
+  /* loop over cells */
   for (int y = 0; y < _cells_y; y++){
-    cell = y*_cells_x;
-    if (adj_weight)
-      leakage -= (_materials[cell]->getDifHat()[0*_num_groups + group] 
-		  + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
-	* _lengths_y[y] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
-    else
-      leakage -= (_materials[cell]->getDifHat()[0*_num_groups + group] 
-		  + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
-	* _lengths_y[y] * flux[cell*_num_groups+group];
-  }
+    for (int x = 0; x < _cells_x; x++){ 
+      cell = y*_cells_x+x;      
+      if (adj_weight){
+	
+	/* LEFT SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[0*_num_groups + group] 
+		    + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
+	  * _lengths_y[y] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
 
-  /* loop over cells on bottom surface */
-  for (int x = 0; x < _cells_x; x++){
-    cell = (_cells_y-1)*_cells_x+x;
-    if (adj_weight)
-      leakage -= (_materials[cell]->getDifHat()[1*_num_groups + group] 
-		  - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
-	* _lengths_x[x] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
-    else
-      leakage -= (_materials[cell]->getDifHat()[1*_num_groups + group] 
-		  - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
-	* _lengths_x[x] * flux[cell*_num_groups+group];
-  }
+	if (x != 0){
+	  leakage += (_materials[cell]->getDifHat()[0*_num_groups + group] 
+		    + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
+	    * _lengths_y[y] * flux[(cell-1)*_num_groups+group] * adj_flux[cell*_num_groups+group];
+	}
+	  
+	/* BOTTOM SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[1*_num_groups + group] 
+		    - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
+	  * _lengths_x[x] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
 
-  /* loop over cells on right surface */
-  for (int y = 0; y < _cells_y; y++){
-    cell = y*_cells_x + _cells_x-1;
-    if (adj_weight)
-      leakage -= (_materials[cell]->getDifHat()[2*_num_groups + group] 
-		  - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
-	* _lengths_y[y] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
-    else
-      leakage -= (_materials[cell]->getDifHat()[2*_num_groups + group] 
-		  - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
-	* _lengths_y[y] * flux[cell*_num_groups+group];
-  }
+	if (y != _cells_y-1)
+	  leakage += (_materials[cell]->getDifHat()[1*_num_groups + group] 
+		      - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
+	    * _lengths_x[x] * flux[(cell+_cells_x)*_num_groups+group] * adj_flux[cell*_num_groups+group];
+	  
 
-  /* loop over cells on top surface */
-  for (int x = 0; x < _cells_x; x++){
-    cell = x;
-    if (adj_weight)
-      leakage -= (_materials[cell]->getDifHat()[3*_num_groups + group] 
-		  + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
-	* _lengths_x[x] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
-    else
-      leakage -= (_materials[cell]->getDifHat()[3*_num_groups + group] 
-		  + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
-	* _lengths_x[x] * flux[cell*_num_groups+group];
+	/* RIGHT SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[2*_num_groups + group] 
+		    - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
+	  * _lengths_y[y] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
+	
+	if (x != _cells_x-1){
+	  leakage += (_materials[cell]->getDifHat()[2*_num_groups + group] 
+		      - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
+	    * _lengths_y[y] * flux[(cell+1)*_num_groups+group] * adj_flux[cell*_num_groups+group];
+	}	 
+	
+	/* TOP SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[3*_num_groups + group] 
+		    + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
+	  * _lengths_x[x] * flux[cell*_num_groups+group] * adj_flux[cell*_num_groups+group];
+
+	if (y != 0){
+	  leakage += (_materials[cell]->getDifHat()[3*_num_groups + group] 
+		      + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
+	    * _lengths_x[x] * flux[(cell-_cells_x)*_num_groups+group] * adj_flux[cell*_num_groups+group];
+	}
+      }
+      else{
+
+	/* LEFT SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[0*_num_groups + group] 
+		    + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
+	  * _lengths_y[y] * flux[cell*_num_groups+group];
+
+	if (x != 0){
+	  leakage += (_materials[cell]->getDifHat()[0*_num_groups + group] 
+		      + _materials[cell]->getDifTilde()[0*_num_groups + group]) 
+	    * _lengths_y[y] * flux[(cell-1)*_num_groups+group];
+	}
+	
+	/* BOTTOM SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[1*_num_groups + group] 
+		    - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
+	  * _lengths_x[x] * flux[cell*_num_groups+group];
+
+	if (y != _cells_y-1){
+	  leakage += (_materials[cell]->getDifHat()[1*_num_groups + group] 
+		      - _materials[cell]->getDifTilde()[1*_num_groups + group]) 
+	    * _lengths_x[x] * flux[(cell+_cells_x)*_num_groups+group];
+	}
+
+	/* RIGHT SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[2*_num_groups + group] 
+		    - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
+	  * _lengths_y[y] * flux[cell*_num_groups+group];
+
+	if (x != _cells_x-1){
+	  leakage += (_materials[cell]->getDifHat()[2*_num_groups + group] 
+		      - _materials[cell]->getDifTilde()[2*_num_groups + group]) 
+	    * _lengths_y[y] * flux[(cell+1)*_num_groups+group];	  
+	}
+
+	/* TOP SURFACE */
+	leakage -= (_materials[cell]->getDifHat()[3*_num_groups + group] 
+		    + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
+	  * _lengths_x[x] * flux[cell*_num_groups+group];
+
+	if (y != 0){
+	  leakage += (_materials[cell]->getDifHat()[3*_num_groups + group] 
+		      + _materials[cell]->getDifTilde()[3*_num_groups + group]) 
+	    * _lengths_x[x] * flux[(cell-_cells_x)*_num_groups+group];
+	}
+      }
+    }
   }
 
   return leakage;
 }
 
+
+void Mesh::dumpFlux(materialState state){
+
+  for (int i = 0; i < _cells_x*_cells_y; i++){
+    for (int e = 0; e < _num_groups; e++)
+      log_printf(NORMAL, "cell: %i, group: %i, flux: %f", i, e, _fluxes.at(state)[i*_num_groups+e]);
+  }
+
+}
