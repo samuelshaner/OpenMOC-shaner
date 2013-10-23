@@ -425,7 +425,7 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 
 #ifdef CMFD
 	if (_cmfd->getMesh()->getAcceleration())
-	    _k_eff = _cmfd->computeKeff();
+	  cmfd_keff = _cmfd->computeKeff();
 #endif	
 
 	computeKeff();
@@ -440,7 +440,7 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 	}
 
 	/* Check for divergence of the fission source distribution */
-	if (i > 10 && residual > _residual_vector.back()) {
+	if (i > 10 && residual > _residual_vector.back() && _cmfd->getMesh()->getAcceleration()) {
 	  log_printf(ERROR, "The residual from iteration %i is greater "
 		     "than the source from iteration %i which indicates "
 		     "the solution is likely diverging. If CMFD "

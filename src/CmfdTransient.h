@@ -29,8 +29,9 @@ enum transientType {
 class CmfdTransient : public Cmfd {
 protected:
   TimeStepper* _time_stepper;
-  Vec _b_prime;
-  Vec _b;
+  double* _b_prime;
+  double* _b;
+
   double _k_eff_0;
 
   double* _frequency;
@@ -50,14 +51,13 @@ protected:
 public:
   CmfdTransient(Geometry* geometry, double criteria=1e-8);
   virtual ~CmfdTransient();
-  virtual int constructMatrices();
+  virtual void constructMatrices();
   virtual double computeKeff(fluxType flux_method=PRIMAL);
-  int createBPrime();
   void setTransientType(transientType trans_type);
   void setFrequency(int i, double value);
   void setAmplitude(int i, double value);
   void setKeff0(double keff_0);
-  virtual int rescaleFlux();
+  virtual void rescaleFlux();
   void setMultigroupPKE(bool mg);
   transientType getTransientType();
   void initialize(TimeStepper* _time_stepper, bool adjoint_weighted);
@@ -69,8 +69,10 @@ public:
   double* getBeta();
   double* getLambda();
   double* getVelocity();
-  int dumpVec(Vec petsc_vec);
   void setInitialSolve(bool initial);
+  
+  void matMultAdd(double* mat, double* vec_1, double* vec_2, double* vec_3);
+  void vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y);
 
 };
 

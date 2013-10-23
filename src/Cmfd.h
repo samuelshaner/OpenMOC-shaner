@@ -26,16 +26,6 @@
 #include "Surface.h"
 #include "Geometry.h"
 #include "Timer.h"
-
-/* petsc input files */
-#ifdef CMFD
-#ifdef _mm_malloc
-#undef _mm_malloc
-#undef _mm_free
-#endif
-#include "petsc.h"
-#include <petscmat.h>
-#endif
 #endif
 
 /**
@@ -62,28 +52,21 @@ protected:
   /* keff */
   double _k_eff;
 
-#ifdef CMFD
-  /* loss matrix */
-  Mat _A;
-
-  /* source matrix */
-  Mat _M;
-
-  /* flux, source, and residual vectors */
-  Vec _phi_new;
-  Vec _phi_old;
-  Vec _source_old;
-  Vec _sold;
-  Vec _snew;
-  Vec _res;
-
-#endif
+  /* matrix and vector objects */
+  double* _A;
+  double* _M;
+  double* _phi_old;
+  double* _phi_new;
+  double* _sold;
+  double* _snew;
+  double* _phi_temp;
 
   /* l2 norm */
   double _l2_norm;
 
   /* keff convergence criteria */
   double _conv_criteria;
+  double _omega;
 
   /* num cells in x and y direction */
   int _cells_x;
@@ -92,9 +75,6 @@ protected:
   /* pointer to timer object */
   Timer* _timer;
 
-  /* flag to determine whether we need to assemble M */
-  bool _assemble_M;
-  
   /* flux type (PRIMAL or ADJOINT) */
   fluxType _flux_method;
 
@@ -118,33 +98,42 @@ public:
   virtual ~Cmfd();
 
   /* worker functions */
-  virtual int constructMatrices();
+  virtual void constructMatrices();
   void computeDs();
   void computeXS();
   void updateMOCFlux();
   double computeDiffCorrect(double d, double h);
   virtual double computeKeff();
-  int createAMPhi();
   void initializeFSRs();
-  virtual int rescaleFlux();
+  virtual void rescaleFlux();
 
   /* get arrays, values, and objects */
-#ifdef CMFD
-  Mat getA();
-  Mat getM();
-#endif
+  double* getA();
+  double* getM();
   Mesh* getMesh();
   double getKeff();
 
   /* set parameters */
-  int setMeshCellFlux();
-  void assembleM(bool assembleM);
+  void setMeshCellFlux();
 
   /* set fsr parameters */
   void setFSRMaterials(Material** FSR_materials);
   void setFSRVolumes(FP_PRECISION* FSR_volumes);
   void setFSRFluxes(FP_PRECISION* scalar_flux);
   void setFluxType(const char* flux_type);
+
+  void vecZero(double* my_vec);
+  void matMult(double* mat, double* vec_1, double* vec_2);
+  void linearSolve(double* mat, double* vec_x, double* vec_b, double conv, double omega);
+  void vecScale(double* vec, double scale_val);
+  double vecSum(double* vec);
+  void vecCopy(double* vec_from, double* vec_to);
+  void matZero(double* mat, int width);
+  void dumpVec(double* vec, int length);
+  void dumpVec(FP_PRECISION* vec, int length);
+  void setOmega(double omega);
+  void vecSet(double* vec, double val);
+  void vecNormal(double* mat, double* vec);
 };
 
 #endif /* CMFD_H_ */

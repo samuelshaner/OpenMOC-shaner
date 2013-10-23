@@ -113,8 +113,13 @@ void TransientSolver::solveOuterStep(){
   
   /* compute the flux at the forward time step */
   if (_improved || _implicit){
-    updatePrecursorConc(CURRENT);
+    solvePKEsWithFeedback();
+    updatePrecursorConc(PREVIOUS);
     keff = computeNewShape(FORWARD);
+    copyFieldVariables(PREVIOUS_CONV, CURRENT);
+    copyAmplitude(_B_prev, _B);
+    _ts->setTime(CURRENT, _ts->getTime(PREVIOUS_CONV));
+    _ts->setTime(PREVIOUS, _ts->getTime(PREVIOUS_CONV));
   }
 
   /* reset outer residual value and save current length of global vectors*/
@@ -133,38 +138,9 @@ void TransientSolver::solveOuterStep(){
       _ts->setTime(PREVIOUS, _ts->getTime(PREVIOUS_CONV));
     }
 
-    /* INTERMEDIATE LOOP */
-    while(_ts->getTime(CURRENT) < _ts->getTime(FORWARD) - 1e-8){
-          
-      /* update materials and flux shape for current intermediate time step*/
-      updateFlux();
-      
-      /* Compute PKE parameters */
-      constructN();
-      
-      /* INNER LOOP */
-      while(_ts->getTime(CURRENT) < _ts->getTime(PREVIOUS) + _dt_intermediate - 1e-9){
-	
-	copyAmplitude(_B, _B_inter);
-	for (int e = 0; e < _num_pke_groups; e++){
-	  _B[e] += _C[e] * _dt_pke;
-	  for (int g = 0; g < _num_pke_groups; g++){
-	    _B[e] += _N[e*_num_pke_groups+g] * _B_inter[g] * _dt_pke;
-	  }
-	}
-	
-	_ts->incrementTime(CURRENT, _dt_pke);
-      }
+    /* solve PKE equations while perturbing materials and performing thermal feedback */
+    solvePKEsWithFeedback();
 
-      _ts->setTime(PREVIOUS, _ts->getTime(CURRENT));
-      updateTemperatures();
-      
-      _time.push_back(_ts->getTime(CURRENT));
-      _temp.push_back(computeCoreTemp());
-      _power.push_back(computePower() * _power_factor);
-      log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f", _time.back(), _power.back(), _temp.back());
-    }
-    
     /* compute new forward time step shape */
     if (_implicit)
       updatePrecursorConc(FORWARD);
@@ -203,6 +179,45 @@ void TransientSolver::solveOuterStep(){
 
 }
 
+
+void TransientSolver::solvePKEsWithFeedback(){
+
+  while(_ts->getTime(CURRENT) < _ts->getTime(FORWARD) - 1e-8){
+    
+    /* update materials and flux shape for current intermediate time step*/
+    updateFlux();
+    
+    /* Compute PKE parameters */
+    constructN();
+    
+    /* solver the PKE equations */
+    solvePKEs();
+      
+    _ts->setTime(PREVIOUS, _ts->getTime(CURRENT));
+    updateTemperatures();
+       
+    _time.push_back(_ts->getTime(CURRENT));
+    _temp.push_back(computeCoreTemp());
+    _power.push_back(computePower() * _power_factor);
+    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f", _time.back(), _power.back(), _temp.back());
+  }
+}
+
+void TransientSolver::solvePKEs(){
+
+  while(_ts->getTime(CURRENT) < _ts->getTime(PREVIOUS) + _dt_intermediate - 1e-9){
+    
+    copyAmplitude(_B, _B_inter);
+    for (int e = 0; e < _num_pke_groups; e++){
+      _B[e] += _C[e] * _dt_pke;
+      for (int g = 0; g < _num_pke_groups; g++){
+	_B[e] += _N[e*_num_pke_groups+g] * _B_inter[g] * _dt_pke;
+      }
+    }
+    
+    _ts->incrementTime(CURRENT, _dt_pke);
+  }
+}
 
 void TransientSolver::copyFieldVariables(materialState state_from, materialState state_to){
 

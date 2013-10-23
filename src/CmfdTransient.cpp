@@ -19,11 +19,14 @@ CmfdTransient::CmfdTransient(Geometry* geometry, double criteria) :
   
   /* Boolean and Enum flags to toggle features */
   _transient_method = NONE;
-  
-  /* Create Cmfd matrix objects */
-  int petsc_err;
-  petsc_err = createBPrime();
+  _omega = 1.0;
+
+  /* set number of groups */
   _num_groups = geometry->getNumEnergyGroups();
+
+  /* create vector objects */
+  _b_prime = new double[_cells_x*_cells_y*_num_groups];
+  _b = new double[_cells_x*_cells_y*_num_groups];
   
   /* transient parameters */
   _lambda = NULL;
@@ -40,20 +43,12 @@ CmfdTransient::CmfdTransient(Geometry* geometry, double criteria) :
  * cmfd Destructor clears all memory
  */
 CmfdTransient::~CmfdTransient() {
+
+  delete [] _b;
+  delete [] _b_prime;
+
 }
 
-
-int CmfdTransient::createBPrime(){
-
-  int petsc_err = 0;
-  
-  /* Create flux, source, and residual vectors */
-  petsc_err = VecCreateSeq(PETSC_COMM_WORLD, _cells_x*_cells_y*_num_groups, &_b_prime);
-  petsc_err = VecCreateSeq(PETSC_COMM_WORLD, _cells_x*_cells_y*_num_groups, &_b);
-  CHKERRQ(petsc_err);
-  
-  return petsc_err;
-}
 
 
 /*
@@ -66,6 +61,15 @@ double CmfdTransient::computeKeff(fluxType flux_method){
 
   log_printf(INFO, "Running cmfd diffusion diffusion solver...");
   
+  /* initialize variables */
+  int iter = 0;
+  double norm = 0.0;
+  double sumold, sumnew, scale_val, eps;
+  double val = 0.0;
+  int row = 0;
+  int iter_in = 0;
+  double conv = 1e1;
+
   _flux_method = flux_method;
 
   if (_solve_method == MOC)
@@ -73,205 +77,126 @@ double CmfdTransient::computeKeff(fluxType flux_method){
 
   computeDs();
 
-  /* initialize variables */
-  int petsc_err = 0;
-  int iter = 0;
-  PetscScalar sumold, sumnew, scale_val, eps;
-  PetscReal rtol = 1e-10;
-  PetscReal atol = 1e-10;
-  Vec sold, snew, res;
-  KSP ksp;
-  
-  /* zero matrices */
-  petsc_err = MatZeroEntries(_A);
-  petsc_err = VecZeroEntries(_b_prime);
-  
-  if (_assemble_M)
-    petsc_err = MatZeroEntries(_M);
-
-  if (_transient_method == IQS)
-    petsc_err = VecZeroEntries(_b);
-  
   /* construct matrices */
-  petsc_err = constructMatrices();
-  CHKERRQ(petsc_err);
+  constructMatrices();
+
+  vecCopy(_phi_old, _phi_new);
+  vecCopy(_phi_old, _phi_temp);
     
-  /* construct matrix and vector objects */
-  petsc_err = VecAssemblyBegin(_phi_new);
-  petsc_err = VecAssemblyEnd(_phi_new);
-  petsc_err = VecAssemblyBegin(_phi_old);
-  petsc_err = VecAssemblyEnd(_phi_old);
-  petsc_err = VecAssemblyBegin(_b);
-  petsc_err = VecAssemblyEnd(_b);
-  petsc_err = VecAssemblyBegin(_sold);
-  petsc_err = VecAssemblyEnd(_sold);
-  petsc_err = VecAssemblyBegin(_snew);
-  petsc_err = VecAssemblyEnd(_snew);
-  petsc_err = VecAssemblyBegin(_res);
-  petsc_err = VecAssemblyEnd(_res);
-  petsc_err = VecAssemblyBegin(_b_prime);
-  petsc_err = VecAssemblyEnd(_b_prime);
-  petsc_err = MatAssemblyBegin(_A, MAT_FINAL_ASSEMBLY);
-  petsc_err = MatAssemblyEnd(_A, MAT_FINAL_ASSEMBLY);
-
-  /* assemble M in needed */
-  if (_assemble_M){
-    petsc_err = MatAssemblyBegin(_M, MAT_FINAL_ASSEMBLY);
-    petsc_err = MatAssemblyEnd(_M, MAT_FINAL_ASSEMBLY);
-  }
-  CHKERRQ(petsc_err);
-
-  /* create petsc ksp objects */
-  petsc_err = KSPCreate(PETSC_COMM_WORLD, &ksp);
-  petsc_err = KSPSetTolerances(ksp, rtol, atol, PETSC_DEFAULT, PETSC_DEFAULT);
-  petsc_err = KSPSetType(ksp, KSPGMRES);
-  petsc_err = KSPSetInitialGuessNonzero(ksp, PETSC_TRUE);
-  petsc_err = KSPSetOperators(ksp, _A, _A, SAME_NONZERO_PATTERN);
-  petsc_err = KSPSetUp(ksp);
-  petsc_err = KSPSetFromOptions(ksp);
-  CHKERRQ(petsc_err);  
-  
   /* If not solving a transport transient with IQS, use SLEPc eigenvalue solver */
   if (_transient_method != IQS){
     
     /* compute the normalize the initial source */
-    petsc_err = MatMult(_M, _phi_old, _sold);
-    petsc_err = VecSum(_sold, &sumold);
+    matMult(_M, _phi_new, _sold);
+    sumold = vecSum(_sold);
     scale_val = (_cells_x * _cells_y * _num_groups) / sumold;
-    petsc_err = VecScale(_sold, scale_val);
+    vecScale(_sold, scale_val);
     sumold = _cells_x * _cells_y * _num_groups;
-    CHKERRQ(petsc_err);
     
     /* power iteration diffusion solver */
-    for (iter = 0; iter < 1000; iter++){
+    for (iter = 0; iter < 20000; iter++){
       
-      /* Solve phi = A^-1 * old_source */
-      petsc_err = KSPSolve(ksp, _sold, _phi_new);
-      
+      /* solver phi = A^-1 * old_source */
+      linearSolve(_A, _phi_new, _sold, conv, _omega);
+
       /* compute the new source */
-      petsc_err = MatMult(_M, _phi_new, _snew);
-      petsc_err = VecSum(_snew, &sumnew);
-      CHKERRQ(petsc_err);
+      matMult(_M, _phi_new, _snew);
+      sumnew = vecSum(_snew);
       
       /* compute and set keff */
       _k_eff = sumnew / sumold;
       
       /* scale the old source by keff */
-      petsc_err = VecScale(_sold, _k_eff);
+      vecScale(_sold, _k_eff);
       
       /* compute the L2 norm of source error */
-      scale_val = 1e-15;
-      petsc_err = VecShift(_snew, scale_val);
-      petsc_err = VecShift(_sold, scale_val);
-      petsc_err = VecPointwiseDivide(_res, _sold, _snew);
-      scale_val = -1;
-      petsc_err = VecShift(_res, scale_val);
-      scale_val = -1e-15;
-      petsc_err = VecShift(_snew, scale_val);
-      petsc_err = VecShift(_sold, scale_val);
-      CHKERRQ(petsc_err);
-      petsc_err = VecNorm(_res, NORM_2, &eps);
-      eps = eps / (_cells_x * _cells_y * _num_groups);
+      norm = 0.0;
+      for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+	norm += pow(_snew[i] - _sold[i], 2);
       
-      /* normalize the new source */
-      scale_val = (_cells_x * _cells_y * _num_groups) / sumnew;
-      petsc_err = VecScale(_snew, scale_val);
-      CHKERRQ(petsc_err);
+      norm = pow(norm, 0.5);
+      norm = norm / (_cells_x*_cells_y*_num_groups);
+      scale_val = (_cells_x*_cells_y*_num_groups) / sumnew;
+      vecScale(_snew, scale_val);
+      vecCopy(_snew, _sold);
       
       /* set old source to new source */
-      petsc_err = VecCopy(_snew, _sold);
-      CHKERRQ(petsc_err);
+      vecCopy(_snew, _sold);
       
-      log_printf(INFO, "CMFD iter: %i, keff: %f, error: %f", iter + 1, _k_eff, eps);
+      log_printf(INFO, "CMFD iter: %i, keff: %f, error: %f", iter + 1, _k_eff, norm);
       
       /* check for convergence */
-      if (eps < _conv_criteria)
+      if (norm < _conv_criteria)
 	break;
     }
   }
   else{
 
-    petsc_err = VecCopy(_phi_old, _phi_new);
+    vecCopy(_phi_old, _phi_new);
     
     /* get initial source and find initial k_eff */
-    petsc_err = MatMult(_M, _phi_new, _snew);
-    petsc_err = VecSum(_snew, &sumnew);
+    matMult(_M, _phi_new, _snew);
+    sumnew = vecSum(_snew);
     
     /* normalize b prime */
     scale_val = (_cells_x*_cells_y*_num_groups) / sumnew;
-    petsc_err = VecScale(_b_prime, scale_val);
-    CHKERRQ(petsc_err);
+    vecScale(_b_prime, scale_val);
     
     /* compute A * phi + b_prime */
-    petsc_err = VecScale(_b_prime, -1);
-    petsc_err = MatMultAdd(_A, _phi_old, _b_prime, _b);
-    petsc_err = VecScale(_b_prime, -1);
-    petsc_err = VecSum(_b, &sumold);
+    vecScale(_b_prime, -1);
+    matMultAdd(_A, _phi_old, _b_prime, _b);
+    vecScale(_b_prime, -1);
+    sumold = vecSum(_b);
 
     /* compute keff */
     _k_eff = float(sumnew)/float(sumold);
     log_printf(INFO, "CMFD iter: %i, keff: %.10f, snew: %f, sold: %f, scale_val: %f", iter, _k_eff, sumnew, sumold, scale_val);
-    CHKERRQ(petsc_err);
     
     /* recompute and normalize initial source */
-    petsc_err = MatMult(_M, _phi_old, _sold);
-    petsc_err = VecSum(_sold, &sumold);
+    matMult(_M, _phi_old, _sold);
+    sumold = vecSum(_sold);
     scale_val = (_cells_x*_cells_y * _num_groups) / sumold;
-    petsc_err = VecScale(_sold, scale_val);
+    vecScale(_sold, scale_val);
     sumold = _cells_x*_cells_y * _num_groups;
-    CHKERRQ(petsc_err);
     
     /* perform power iterations to converge the flux */
-    for (iter = 0; iter < 1000; iter++){
+    for (iter = 0; iter < 20000; iter++){
       
       /* solve A * b = phi_new */
-      petsc_err = VecWAXPY(_b, _k_eff, _b_prime, _sold);
-      petsc_err = KSPSolve(ksp, _b, _phi_new);
+      vecWAXPY(_b, _k_eff, _b_prime, _sold);
+      linearSolve(_A, _phi_new, _b, conv, _omega);
       
       /* computed the new source */
-      petsc_err = MatMult(_M, _phi_new, _snew);
-      petsc_err = VecSum(_snew, &sumnew);
+      matMult(_M, _phi_new, _snew);
+      sumnew = vecSum(_snew);
       
       /* compute new keff */
       _k_eff = sumnew / sumold;
 
       /* compute the L2 norm of source error */
-      scale_val = 1e-15;
-      petsc_err = VecShift(_snew, scale_val);
-      petsc_err = VecShift(_sold, scale_val);
-      petsc_err = VecPointwiseDivide(_res, _sold, _snew);
-      scale_val = -1;
-      petsc_err = VecShift(_res, scale_val);
-      scale_val = -1e-15;
-      petsc_err = VecShift(_snew, scale_val);
-      petsc_err = VecShift(_sold, scale_val);
-      CHKERRQ(petsc_err);
-      petsc_err = VecNorm(_res, NORM_2, &eps);
-      eps = eps / (_cells_x * _cells_y * _num_groups);
+      norm = 0.0;
+      for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+	norm += pow(_snew[i]/_k_eff - _sold[i], 2);
       
-      /* normalize the new source */
-      scale_val = (_cells_x*_cells_y * _num_groups) / sumnew;
-      petsc_err = VecScale(_snew, scale_val);
-      CHKERRQ(petsc_err);
-      
-      /* set old source to new source */
-      petsc_err = VecCopy(_snew, _sold);
-      CHKERRQ(petsc_err);
-      
+      norm = pow(norm, 0.5);
+      norm = norm / (_cells_x*_cells_y*_num_groups);
+      scale_val = (_cells_x*_cells_y*_num_groups) / sumnew;
+      vecScale(_snew, scale_val);
+      vecCopy(_snew, _sold);
+
+      log_printf(INFO, "CMFD iter: %i, keff: %f, error: %f", iter + 1, _k_eff, norm);
+
       /* check for convergence */
-      if (eps < _conv_criteria)
-	break;   
+      if (norm < _conv_criteria)
+	break;
     }
   }
   
-  /* destroy KSP object */
-  petsc_err = KSPDestroy(&ksp);
-  
   /* rescale flux and pass to meshCells */
-  petsc_err = rescaleFlux();
+  rescaleFlux();
   
   /* give the petsc flux array to the mesh cell flux array */
-  petsc_err = setMeshCellFlux();
+  setMeshCellFlux();
   
   updateMOCFlux();
   
@@ -279,21 +204,42 @@ double CmfdTransient::computeKeff(fluxType flux_method){
 }
 
 
+void CmfdTransient::vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y){
+
+  vecZero(vec_w);
+
+  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+    vec_w[i] = a * vec_x[i] + vec_y[i];
+
+}
+
+void CmfdTransient::matMultAdd(double* mat, double* vec_1, double* vec_2, double* vec_3){
+
+  vecZero(vec_3);
+
+  for (int i = 0; i < _cells_x*_cells_y; i++){
+    for (int g = 0; g < _num_groups; g++){
+      for (int e = 0; e < _num_groups; e++){
+	vec_3[i*_num_groups+g] += mat[(i*_num_groups+g)*_num_groups+e] * vec_1[i*_num_groups+e];
+      }
+    }
+  }
+
+  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+    vec_3[i] += vec_2[i];
+
+}
+
 /* rescale flux */
-int CmfdTransient::rescaleFlux(){
+void CmfdTransient::rescaleFlux(){
 
   /* initialize variables */
-  int petsc_err = 0;
-  PetscScalar sumnew, sumold, scale_val;
+  double sumnew, scale_val;
 
   /* rescale the new and old flux to have an avg source of 1.0 */
-  petsc_err = VecSum(_phi_new, &sumnew);
+  sumnew = vecSum(_phi_new);
   scale_val = _cells_x*_cells_y*_num_groups / sumnew;
-  petsc_err = VecScale(_phi_new, scale_val);
-
-  CHKERRQ(petsc_err);
-  
-  return 0;
+  vecScale(_phi_new, scale_val);
 }
 
 
@@ -304,14 +250,13 @@ int CmfdTransient::rescaleFlux(){
  * @param solve methed - either DIFFUSION or CMFD
  * @return petsc error indicator
  */
-int CmfdTransient::constructMatrices(){
+void CmfdTransient::constructMatrices(){
 
   log_printf(INFO,"Constructing cmfd transient matrices...");
   
   /* initialized variables */
-  int petsc_err = 0;
-  PetscInt row, col;
-  PetscScalar value, phi, b_prime = 0;
+  int row, col;
+  double value, phi, b_prime = 0;
   int cell;
   
   Material **materials = _mesh->getMaterials();
@@ -319,6 +264,12 @@ int CmfdTransient::constructMatrices(){
   double* heights = _mesh->getLengthsY();
   double* widths = _mesh->getLengthsX();
   
+  vecZero(_phi_old);
+  vecZero(_b_prime);
+  vecZero(_b);
+  matZero(_M, _num_groups);
+  matZero(_A, _num_groups*4);
+
   /* loop over mesh cells in y direction */
   for (int y = 0; y < _cells_y; y++){
     
@@ -334,28 +285,25 @@ int CmfdTransient::constructMatrices(){
 
 	/* flux */
 	value = old_flux[cell*_num_groups + e];
-	petsc_err = VecSetValue(_phi_old, row, value, INSERT_VALUES);
+	_phi_old[row] = value;
 	
 	/* absorption term */
-	col = cell*_num_groups+e;
 	value = materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
-	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	_A[row*(_num_groups+4)+e+2] += value;
 
 	/* out (1st) and in (2nd) scattering */
 	if (_flux_method == PRIMAL){
 	  for (int g = 0; g < _num_groups; g++){
 	    if (e != g){
-	      col = cell*_num_groups+e;
 	      value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell]; 
-	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	      _A[row*(_num_groups+4)+e+2] += value;	      
 
 	      if (_multigroup_PKE)
 		value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell] * _amplitude[g] / _amplitude[e];
 	      else
 		value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell] * _amplitude[0] / _amplitude[0];  
 
-	      col = cell*_num_groups+g;
-	      petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	      _A[row*(_num_groups+4)+g+2] += value;
 	    }
 	  }
 	}
@@ -365,11 +313,11 @@ int CmfdTransient::constructMatrices(){
 
 	      col = cell*_num_groups+e;
 	      value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
-	      petsc_err = MatSetValues(_A, 1, &col, 1, &row, &value, ADD_VALUES);
+	      _A[col*(_num_groups+4)+e+2] += value;
 
 	      col = cell*_num_groups+g;
 	      value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
-	      petsc_err = MatSetValues(_A, 1, &col, 1, &row, &value, ADD_VALUES);
+	      _A[col*(_num_groups+4)+e+2] += value;
 	    }
 	  }
 	}
@@ -381,8 +329,7 @@ int CmfdTransient::constructMatrices(){
 	  else
 	    value = _frequency[0] / (_velocity[e] * _amplitude[0]) * _mesh->getVolumes()[cell];
 
-	  col = cell*_num_groups+e;
-	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	  _A[row*(_num_groups+4)+e+2] += value;
 	}
 	else if (_transient_method == IQS && !_initial_solve){
 	  if (_multigroup_PKE)
@@ -390,14 +337,13 @@ int CmfdTransient::constructMatrices(){
 	  else
 	    value = 1.0 / _velocity[e] * (_frequency[0] / _amplitude[0] + 1.0 / _time_stepper->getDtOuter()) * _mesh->getVolumes()[cell];
 	  
-	  col = cell*_num_groups+e;
-	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	  _A[row*(_num_groups+4)+e+2] += value;
 	}
 	
 	/* add previous shape to new vector */
 	if (_transient_method == IQS && !_initial_solve){
 	  value = 1.0 / (_velocity[e] * _time_stepper->getDtOuter()) * _mesh->getVolumes()[cell] * old_flux[cell*_num_groups + e];
-	  petsc_err = VecSetValue(_b_prime, row, value, INSERT_VALUES);
+	  _b_prime[row] = value;
 	}
 		
 	/* RIGHT SURFACE */
@@ -407,8 +353,7 @@ int CmfdTransient::constructMatrices(){
 			    - materials[cell]->getDifTilde()[2*_num_groups + e]) 
 	                    * heights[cell / _cells_x];
 
-	col = cell*_num_groups+e;
-	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	_A[row*(_num_groups+4)+e+2] += value;
 	
 	/* set transport term on off diagonal */
 	if (x != _cells_x - 1){
@@ -416,8 +361,7 @@ int CmfdTransient::constructMatrices(){
 					+ materials[cell]->getDifTilde()[2*_num_groups + e]) 
 	                                * heights[cell / _cells_x];
 
-	  col = (cell+1)*_num_groups+e;
-	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	  _A[row*(_num_groups+4)+_num_groups+2] += value; 
 	}
 
 	/* LEFT SURFACE */
@@ -427,8 +371,7 @@ int CmfdTransient::constructMatrices(){
 			    + materials[cell]->getDifTilde()[0*_num_groups + e]) 
 	                    * heights[cell / _cells_x];
 	
-	col = cell*_num_groups+e;
-	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	_A[row*(_num_groups+4)+e+2] += value;
 	
 	/* set transport term on off diagonal */
 	if (x != 0){
@@ -436,8 +379,7 @@ int CmfdTransient::constructMatrices(){
 			    - materials[cell]->getDifTilde()[0*_num_groups + e]) 
 	                    * heights[cell / _cells_x];
 
-	    col = (cell-1)*_num_groups+e;
-	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	  _A[row*(_num_groups+4)] += value; 
 	}
 	
 	/* BOTTOM SURFACE */
@@ -447,8 +389,7 @@ int CmfdTransient::constructMatrices(){
 			    - materials[cell]->getDifTilde()[1*_num_groups + e]) 
 	                    * widths[cell % _cells_x];
 
-	col = cell*_num_groups+e;
-	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	_A[row*(_num_groups+4)+e+2] += value;
        
 	/* set transport term on off diagonal */
 	if (y != _cells_y - 1){
@@ -456,8 +397,7 @@ int CmfdTransient::constructMatrices(){
 			  + materials[cell]->getDifTilde()[1*_num_groups + e]) 
 	                  * widths[cell % _cells_x];
 
-	  col = (cell+_cells_x)*_num_groups+e;
-	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	  _A[row*(_num_groups+4)+1] += value; 
 	}
 	
 	/* TOP SURFACE */
@@ -467,8 +407,7 @@ int CmfdTransient::constructMatrices(){
 			    + materials[cell]->getDifTilde()[3*_num_groups + e]) 
 	                    * widths[cell % _cells_x];
 
-	col = cell*_num_groups+e;
-	petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	_A[row*(_num_groups+4)+e+2] += value;
 	
 	/* set transport term on off diagonal */
 	if (y != 0){
@@ -476,41 +415,38 @@ int CmfdTransient::constructMatrices(){
 					- materials[cell]->getDifTilde()[3*_num_groups + e]) 
 	                                * widths[cell % _cells_x];
 
-	  col = (cell-_cells_x)*_num_groups+e;
-	  petsc_err = MatSetValues(_A, 1, &row, 1, &col, &value, ADD_VALUES);
+	  _A[row*(_num_groups+4)+_num_groups+3] += value; 
 	}
 			
 	/* add fission terms to M */
-	if (_assemble_M){
-	  for (int g = 0; g < _num_groups; g++){
-
-	    if (_transient_method == ADIABATIC){
-	      if (_multigroup_PKE)
-		value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * _amplitude[g] / _amplitude[e] / _k_eff_0;
-	      else
-		value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * _amplitude[0] / _amplitude[0] / _k_eff_0;
-	    }
-	    else{
-	      value = 0.0;
-	      for (int dg = 0; dg < _num_delay_groups; dg++){
-		if (_multigroup_PKE)
-		  value += (_beta[dg] * _lambda[dg] * materials[cell]->getChi()[e]* materials[cell]->getNuSigmaF()[g]) / ((_lambda[dg] + _frequency[dg]) * _k_eff_0) * _amplitude[g] / _amplitude[e];
-		else
-		  value += (_beta[dg] * _lambda[dg] * materials[cell]->getChi()[e]* materials[cell]->getNuSigmaF()[g]) / ((_lambda[dg] + _frequency[dg]) * _k_eff_0) * _amplitude[0] / _amplitude[0];
-	      }
-
-	      if (_multigroup_PKE)
-		value += materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * (1.0 - _beta_sum)  * _amplitude[g] / _amplitude[e] / _k_eff_0;
-	      else
-		value += materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * (1.0 - _beta_sum)  * _amplitude[0] / _amplitude[0] / _k_eff_0;	      
-	    }
-
-	    col = cell*_num_groups+g;
-	    if (_flux_method == PRIMAL)
-	      petsc_err = MatSetValues(_M, 1, &row, 1, &col, &value, ADD_VALUES);
+	for (int g = 0; g < _num_groups; g++){
+	  
+	  if (_transient_method == ADIABATIC){
+	    if (_multigroup_PKE)
+	      value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * _amplitude[g] / _amplitude[e] / _k_eff_0;
 	    else
-	      petsc_err = MatSetValues(_M, 1, &col, 1, &row, &value, ADD_VALUES);	    
+	      value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * _amplitude[0] / _amplitude[0] / _k_eff_0;
 	  }
+	  else{
+	    value = 0.0;
+	    for (int dg = 0; dg < _num_delay_groups; dg++){
+	      if (_multigroup_PKE)
+		value += (_beta[dg] * _lambda[dg] * materials[cell]->getChi()[e]* materials[cell]->getNuSigmaF()[g]) / ((_lambda[dg] + _frequency[dg]) * _k_eff_0) * _amplitude[g] / _amplitude[e];
+	      else
+		value += (_beta[dg] * _lambda[dg] * materials[cell]->getChi()[e]* materials[cell]->getNuSigmaF()[g]) / ((_lambda[dg] + _frequency[dg]) * _k_eff_0) * _amplitude[0] / _amplitude[0];
+	    }
+	    
+	    if (_multigroup_PKE)
+	      value += materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * (1.0 - _beta_sum)  * _amplitude[g] / _amplitude[e] / _k_eff_0;
+	    else
+	      value += materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] * (1.0 - _beta_sum)  * _amplitude[0] / _amplitude[0] / _k_eff_0;	      
+	  }
+	  
+	  col = cell*_num_groups+g;
+	  if (_flux_method == PRIMAL)
+	    _M[row*_num_groups+g] += value; 
+	  else
+	    _M[col*(_num_groups)+e] += value; 
 	}
       }
     }
@@ -518,7 +454,6 @@ int CmfdTransient::constructMatrices(){
   
   log_printf(INFO,"Done constructing matrices...");
   
-  return petsc_err;
 }
 
 
@@ -628,29 +563,6 @@ void CmfdTransient::setVelocity(double* velocity, int num_groups){
   for (int g = 0; g < num_groups; g++)
     _velocity[g] = velocity[g];
   
-}
-
-
-int CmfdTransient::dumpVec(Vec petsc_vec){
-
-  log_printf(NORMAL, "Dumping vector...");
-
-  int petsc_err = 0;
-
-  PetscScalar *scalar_vec;
-  petsc_err = VecGetArray(petsc_vec, &scalar_vec);
-  CHKERRQ(petsc_err);
-  
-  for (int i = 0; i < _cells_x*_cells_y; i++){
-    for (int e = 0; e < _num_groups; e++){
-      log_printf(NORMAL, "cell: %i, group: %i, value: %f", i, e, double(scalar_vec[i*_num_groups + e]));
-    }
-  }
-  
-  petsc_err = VecRestoreArray(petsc_vec, &scalar_vec);
-  CHKERRQ(petsc_err);
-
-  return petsc_err;
 }
 
 

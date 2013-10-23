@@ -126,6 +126,10 @@ public:
   void copyPrecConc(materialState state_from, materialState state_to);
   void copyTemperature(materialState state_from, materialState state_to);
   void copyFieldVariables(materialState state_from, materialState state_to);
+
+  void solvePKEsWithFeedback();
+  void solvePKEs();
+
 };
 
 
