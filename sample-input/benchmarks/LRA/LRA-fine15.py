@@ -15,7 +15,7 @@ log.setLogLevel('INFO')
 
 log.py_printf('NORMAL', 'Importing materials data from py...')
 
-materials = materialize.materialize('LRA-materials.py')
+materials = materialize.materialize('LRA-materials-transient.py')
 
 region1 = materials['region_1'].getId()
 region2 = materials['region_2'].getId()

@@ -158,7 +158,7 @@ void Cmfd::computeXS(){
 	rxn_tally += flux * volume;
 	vol_tally += volume;
 	for (int g = 0; g < _num_groups; g++)
-	  scat_tally[g] += scat[e*_num_groups + g] * flux * volume;
+	  scat_tally[g] += scat[g*_num_groups + e] * flux * volume;
 	
 	/* choose a chi for this group */
 	if (chi >= cell_material->getChi()[e])
@@ -177,7 +177,7 @@ void Cmfd::computeXS(){
 		 tot_tally / rxn_tally, nu_fis_tally / rxn_tally, dif_tally / rxn_tally, rxn_tally / vol_tally);
       
       for (int g = 0; g < _num_groups; g++){
-	cell_material->setSigmaSByGroup(scat_tally[g] / rxn_tally, e, g);
+	cell_material->setSigmaSByGroup(scat_tally[g] / rxn_tally, g, e);
 	log_printf(DEBUG, "scattering from %i to %i: %f", e, g, scat_tally[g] / rxn_tally);
       }
     }
@@ -397,6 +397,7 @@ double Cmfd::computeKeff(){
     computeXS();
   
   computeDs();
+
   constructMatrices();
     
   /* get initial source */
@@ -444,7 +445,7 @@ double Cmfd::computeKeff(){
 
   /* rescale the old and new flux */
   rescaleFlux();
-  
+
   /* give the petsc flux array to the mesh cell flux array */
   setMeshCellFlux();
   
@@ -492,8 +493,8 @@ void Cmfd::linearSolve(double* mat, double* vec_x, double* vec_b, double conv, d
 	
 	/* left surface */
 	if (i % _cells_x != 0)
-	  val -= omega * vec_x[row-_num_groups] * _A[row*(_num_groups+4)] / 
-	    _A[row*(_num_groups+4)+g+2];
+	  val -= omega * vec_x[row-_num_groups] * mat[row*(_num_groups+4)] / 
+	    mat[row*(_num_groups+4)+g+2];
 	
 	/* bottom surface */
 	if (i / _cells_x != _cells_y-1)
@@ -536,7 +537,6 @@ void Cmfd::linearSolve(double* mat, double* vec_x, double* vec_b, double conv, d
 }
 
 
-
 /**
  * @brief rescale the initial and converged flux arrays
  * @return petsc_err petsc error flag
@@ -575,7 +575,7 @@ void Cmfd::vecNormal(double* mat, double* vec){
   double source, scale_val;
   matMult(mat, vec, _phi_temp);
   source = vecSum(_phi_temp);
-  scale_val = (_cells_x*_cells_y*_num_groups);
+  scale_val = (_cells_x*_cells_y*_num_groups) / source;
   vecScale(vec, scale_val);
 
 }
@@ -646,7 +646,7 @@ void Cmfd::setMeshCellFlux(){
  */
 void Cmfd::constructMatrices(){
 
-  log_printf(INFO,"Constructing AMPhi...");
+  log_printf(INFO,"Constructing matrices...");
   
   double value;
   int cell;
@@ -697,11 +697,11 @@ void Cmfd::constructMatrices(){
 	  for (int g = 0; g < _num_groups; g++){
 	    if (e != g){
 	      col = cell*_num_groups+e;
-	      value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
-	      _A[col*(_num_groups+4)+e+2] += value;
+	      value = materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
+	      _A[row*(_num_groups+4)+e+2] += value;
 	      col = cell*_num_groups+g;
-	      value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
-	      _A[col*(_num_groups+4)+e+2] += value;
+	      value = - materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
+	      _A[row*(_num_groups+4)+g+2] += value;
 	    }
 	  }
 	}
@@ -790,11 +790,17 @@ void Cmfd::constructMatrices(){
 	  else
 	    _M[col*(_num_groups)+e] += value; 
 	}
+
+	for (int i = 0; i < _num_groups+4; i++)
+	  log_printf(DEBUG, "cell: %i, group: %i, i: %i, val: %f", cell, e, i, _A[row*(_num_groups+4)+i]);
+
+
+
       }
     }
   }
   
-  log_printf(INFO,"Done constructing AMPhi...");  
+  log_printf(INFO,"Done constructing matrices...");  
 
 }
 
@@ -1008,16 +1014,6 @@ void Cmfd::setFluxType(const char* flux_type){
 
 
 void Cmfd::dumpVec(double* vec, int length){
-
-  log_printf(NORMAL, "Dumping vector...");
-
-  for (int i = 0; i < length; i++){
-    log_printf(NORMAL, "cell: %i, value: %f", i, vec[i]);
-  }
-}
-
-
-void Cmfd::dumpVec(FP_PRECISION* vec, int length){
 
   log_printf(NORMAL, "Dumping vector...");
 

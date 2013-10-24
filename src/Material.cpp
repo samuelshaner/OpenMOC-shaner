@@ -986,7 +986,6 @@ Material* Material::clone(){
   
   material_clone->setNumEnergyGroups(_num_groups);
   material_clone->setSigmaT(_sigma_t, _num_groups);
-  material_clone->setSigmaA(_sigma_a, _num_groups);
   material_clone->setSigmaF(_sigma_f, _num_groups);
   material_clone->setNuSigmaF(_nu_sigma_f, _num_groups);
   material_clone->setChi(_chi, _num_groups);
@@ -1006,6 +1005,8 @@ Material* Material::clone(){
     for (int i = 0; i < _num_groups; i++)
       for (int s = 0; s < 4; s++)
 	material_clone->setDifTildeByGroup(_dif_tilde[s*_num_groups+i], i, s);  
+
+  material_clone->setSigmaA(_sigma_a, _num_groups);
 
   copySigmaS(material_clone);
 

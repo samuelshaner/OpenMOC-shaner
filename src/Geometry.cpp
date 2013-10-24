@@ -1626,9 +1626,7 @@ void Geometry::findFSRs(Universe* univ, int cell_num, int *fsr_id){
 
 	    /* If the current cell is a MATERIAL type cell, store its fsr_id */
 	    if (curr->getType() == MATERIAL) {
-	        log_printf(DEBUG, "pushing back fsr id: %i", *fsr_id);
 		_mesh->getCellFSRs()->at(cell_num).push_back(*fsr_id);
-		log_printf(DEBUG, "cell num %i, fsr list: %i", cell_num, _mesh->getCellFSRs()->at(cell_num).size());
 		*fsr_id += 1;
 	    }
 

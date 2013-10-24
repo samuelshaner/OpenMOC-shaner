@@ -8,7 +8,7 @@ import openmoc.materialize as materialize
 ###############################################################################
 
 tolerance = 1E-10
-log.setLogLevel('NORMAL')
+log.setLogLevel('INFO')
 
 ###############################################################################
 ###########################   Creating Materials   ############################
@@ -16,7 +16,7 @@ log.setLogLevel('NORMAL')
 
 log.py_printf('NORMAL', 'Importing materials data...')
 
-materials = materialize.materialize('LRA-materials.hdf5')
+materials = materialize.materialize('LRA-materials-transient.py')
 
 region1 = materials['region_1'].getId()
 region2 = materials['region_2'].getId()
@@ -109,7 +109,6 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd...')
 
 cmfd = Cmfd(geometry)
-cmfd.setFluxType('ADJOINT')
 cmfd.computeKeff()
 
 log.py_printf('NORMAL', 'k_eff = %f', cmfd.getKeff())

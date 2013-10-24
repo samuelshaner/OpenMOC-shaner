@@ -130,7 +130,6 @@ public:
   void vecCopy(double* vec_from, double* vec_to);
   void matZero(double* mat, int width);
   void dumpVec(double* vec, int length);
-  void dumpVec(FP_PRECISION* vec, int length);
   void setOmega(double omega);
   void vecSet(double* vec, double val);
   void vecNormal(double* mat, double* vec);

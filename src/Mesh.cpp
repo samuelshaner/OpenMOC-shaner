@@ -1056,3 +1056,39 @@ void Mesh::dumpFlux(materialState state){
   }
 
 }
+
+
+void Mesh::dumpXS(){
+
+  /* initialize variables */
+  
+  for (int i = 0; i < _cells_x * _cells_y; i++){
+    
+    log_printf(NORMAL, "-----------------------------------");
+    
+    if (_materials[i]->getType() == FUNCTIONAL)
+      log_printf(NORMAL, "Cell %i (%i,%i), MATERIAL ID: %i, TEMP: %f", i, i % _cells_x, i / _cells_x, _materials[i]->getId(), static_cast<FunctionalMaterial*>(_materials[i])->getTemperature(CURRENT));
+    else
+      log_printf(NORMAL, "Cell (%i,%i), MATERIAL ID: %i", i % _cells_x, i / _cells_x, _materials[i]->getId());
+    
+    for (int e = 0; e < _num_groups; e++){
+      log_printf(NORMAL, "GROUP        : %i", e);
+      log_printf(NORMAL, "sigma_f      : %f", _materials[i]->getSigmaF()[e]);
+      log_printf(NORMAL, "nu_sigma_f   : %f", _materials[i]->getNuSigmaF()[e]);
+      log_printf(NORMAL, "sigma_t      : %f", _materials[i]->getSigmaT()[e]);
+      log_printf(NORMAL, "sigma_a      : %f", _materials[i]->getSigmaA()[e]);
+      log_printf(NORMAL, "chi          : %f", _materials[i]->getChi()[e]);
+      log_printf(NORMAL, "Diff         : %f", _materials[i]->getDifCoef()[e]);
+      log_printf(NORMAL, "Flux         : %f", _fluxes.at(CURRENT)[i*_num_groups+e]);
+      for (int g = 0; g < _num_groups; g++)
+	log_printf(NORMAL, "sigma_s %i->%i: %f", e, g, _materials[i]->getSigmaS()[g*_num_groups+e]);
+      
+      for (int s = 0; s < 4; s++){
+	log_printf(NORMAL, "Surface      : %i", s);
+	log_printf(NORMAL, "Diff Hat     : %f", _materials[i]->getDifHat()[s*_num_groups+e]);
+	log_printf(NORMAL, "Diff Tilde   : %f", _materials[i]->getDifTilde()[s*_num_groups+e]);
+	log_printf(NORMAL, "Current      : %f", _currents[i*_num_groups*8 + s*_num_groups + e]);
+      }
+    }
+  }
+}
