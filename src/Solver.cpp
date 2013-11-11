@@ -67,6 +67,13 @@ Solver::Solver(Geometry* geometry, TrackGenerator* track_generator, Cmfd* cmfd) 
     	_cmfd = new Cmfd(_geometry, MOC);
     else
     	_cmfd = cmfd;
+
+    if (_geometry->getBCTop() == ZERO_FLUX || _geometry->getBCBottom() == ZERO_FLUX 
+	|| _geometry->getBCLeft() == ZERO_FLUX || _geometry->getBCRight() == ZERO_FLUX)
+      log_printf(ERROR, "You have input a ZERO_FLUX BC for solving an MOC transport problem!"
+		 " OpenMOC only supports ZERO_FLUX BCs for solving diffusion problems."
+		 " Please set your ZERO_FLUX BCs to another BC (VACUUM or REFLECTIVE).");    
+
 }
 
 
@@ -392,6 +399,10 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     /* The residual on the source */
     FP_PRECISION residual = 0.0;
 
+    /* The old residual and keff */
+    FP_PRECISION residual_old = 1.0;
+    FP_PRECISION keff_old = 1.0;    
+
     /* Initialize data structures */
     initializePolarQuadrature();
     initializeFluxArrays();
@@ -407,9 +418,10 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     flattenFSRSources(1.0);
     zeroTrackFluxes();
 
-    initializeCmfd();
-    FP_PRECISION cmfd_keff;
-
+    /* initialize cmfd */
+    if (_cmfd->getMesh()->getAcceleration())
+	initializeCmfd();
+    
     /* Source iteration loop */
     for (int i=0; i < max_iterations; i++) {
 
@@ -421,8 +433,9 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 	transportSweep();	
 	addSourceToScalarFlux();
 
+	/* update the flux with cmfd */
 	if (_cmfd->getMesh()->getAcceleration())
-	  cmfd_keff = _cmfd->computeKeff();
+	  _k_eff = _cmfd->computeKeff();
 
 	computeKeff();
 
@@ -436,15 +449,26 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 	}
 
 	/* Check for divergence of the fission source distribution */
-	if (i > 10 && residual > _residual_vector.back() && _cmfd->getMesh()->getAcceleration()) {
-	  log_printf(ERROR, "The residual from iteration %i is greater "
-		     "than the source from iteration %i which indicates "
-		     "the solution is likely diverging. If CMFD "
-		     " is turned on, please run the simulation again "
-		     "with CMFD acceleration turned off.", i, i-1);
+	if (_cmfd->getMesh()->getAcceleration()){
+	    if (fabs(_k_eff - keff_old) < _source_convergence_thresh*1e-3 &&
+		fabs(residual - residual_old) < _source_convergence_thresh*1e-2){
+		log_printf(WARNING, "Convergence was determined based on keff convergence");
+		_timer->stopTimer();
+		_timer->recordSplit("Total time to converge the source");
+		return _k_eff;
+	    }
+
+	    if (i > 10 && residual > residual_old*10){
+		log_printf(ERROR, "The residual from iteration %i is greater "
+			   "than the source from iteration %i which indicates "
+			   "the solution is likely diverging. If CMFD "
+			   " is turned on, please run the simulation again "
+			   "with CMFD acceleration turned off.", i, i-1);
+	    }
 	}
 
-	_residual_vector.push_back(residual);
+	residual_old = residual;
+	keff_old = _k_eff;
     }
 
     _timer->stopTimer();

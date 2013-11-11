@@ -93,10 +93,13 @@ void Mesh::initialize(){
   /* allocate memory for fluxes */
   double* new_flux;
   double* old_flux;
+  double* adj_flux;
   new_flux = new double[_cells_x*_cells_y*_num_groups];
   old_flux = new double[_cells_x*_cells_y*_num_groups];
+  adj_flux = new double[_cells_x*_cells_y*_num_groups];
   _fluxes.insert(std::pair<materialState, double*>(CURRENT, new_flux));
   _fluxes.insert(std::pair<materialState, double*>(PREVIOUS, old_flux));
+  _fluxes.insert(std::pair<materialState, double*>(ADJ, adj_flux));
   
   /* allocate memory for cell widths, heights, and bounds */
   _lengths_x = new double[_cells_x];
@@ -112,6 +115,7 @@ void Mesh::initialize(){
         for (int g = 0; g < _num_groups; g++){
 	    new_flux[(y*_cells_x+x)*_num_groups + g] = 1.0;
 	    old_flux[(y*_cells_x+x)*_num_groups + g] = 1.0;
+	    adj_flux[(y*_cells_x+x)*_num_groups + g] = 1.0;
 	}
 
 	/* allocate memory for fsr vector */

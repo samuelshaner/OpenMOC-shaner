@@ -1202,12 +1202,11 @@ void Geometry::segmentize(Track* track) {
 	    new_segment->_region_id = fsr_id;
 
 	    /* get pointer to mesh surfaces that the segment crosses */
-#ifdef CMFD
 	    if (_mesh->getCmfdOn()){
 	      new_segment->_mesh_surface_fwd = _mesh->findMeshSurface(new_segment->_region_id, &segment_end, track->getAzimAngleIndex());
 	      new_segment->_mesh_surface_bwd = _mesh->findMeshSurface(new_segment->_region_id, &segment_start, track->getAzimAngleIndex());
 	    }
-#endif
+
 	    /* Add the segment to the track */
 	    track->addSegment(new_segment);
  
@@ -1568,7 +1567,7 @@ void Geometry::initializeMesh(){
     log_printf(DEBUG, "mesh cell height: %i", _mesh->getCellsY());
     
     /* Decide whether cmfd acceleration is really needed for MOC acceleration */
-    if (_num_FSRs <= 1000){
+    if (_num_FSRs <= 1000 && _mesh->getSolveType() == MOC){
       _mesh->setAcceleration(false);
       log_printf(INFO, "Cmfd acceleration was turned off because there are "
 		"<= 100 fsrs and CMFD is not needed for small geometries");
@@ -1597,8 +1596,6 @@ void Geometry::initializeMesh(){
     _mesh->setCellBounds();
     _mesh->initializeMaterials(&_materials, _FSRs_to_materials_id);
 
-    log_printf(INFO, "Done defining mesh");
-
     return;
 }
 
@@ -1626,7 +1623,9 @@ void Geometry::findFSRs(Universe* univ, int cell_num, int *fsr_id){
 
 	    /* If the current cell is a MATERIAL type cell, store its fsr_id */
 	    if (curr->getType() == MATERIAL) {
+	        log_printf(DEBUG, "pushing back fsr id: %i", *fsr_id);
 		_mesh->getCellFSRs()->at(cell_num).push_back(*fsr_id);
+		log_printf(DEBUG, "cell num %i, fsr list: %i", cell_num, _mesh->getCellFSRs()->at(cell_num).size());
 		*fsr_id += 1;
 	    }
 
@@ -1710,9 +1709,9 @@ void Geometry::defineMesh(Mesh* mesh, Universe* univ, int depth, int* meshCellNu
 	if (depth == 1){
 	    /* if the current LATTICE is the base lattice */
 	    if (base == true){
-	        for (int i = num_y-1; i > -1; i--) {
-		    for (int j = 0; j < num_x; j++) {
-		        curr = lattice->getUniverse(j, i);
+	      for (int i = num_y-1; i > -1; i--) {
+		for (int j = 0; j < num_x; j++) {
+		        curr = lattice->getUniverse(j,i);
 			fsr_id = lattice->getFSR(j,i);
 			log_printf(DEBUG, "added FSR id to counter -> fsr id: %i", fsr_id);
 			
@@ -1729,7 +1728,7 @@ void Geometry::defineMesh(Mesh* mesh, Universe* univ, int depth, int* meshCellNu
 	    else{
 	        int baseFSR = fsr_id;
 	        for (int j = 0; j < num_x; j++) {
-		    curr = lattice->getUniverse(j, row);
+		    curr = lattice->getUniverse(j,row);
 		    fsr_id = baseFSR + lattice->getFSR(j,row);
 		    log_printf(DEBUG, "set fsr id to: %i", fsr_id);
 		    
@@ -1747,12 +1746,12 @@ void Geometry::defineMesh(Mesh* mesh, Universe* univ, int depth, int* meshCellNu
 	else {
 	    base = false;
 	    for (int i = num_y-1; i > -1; i--) {
-	        curr = lattice->getUniverse(0, i);
+	        curr = lattice->getUniverse(0,i);
 		int nextHeight = nextLatticeHeight(curr);
 		log_printf(DEBUG, "next height: %i", nextHeight);
 		for (int k = nextHeight-1; k > -1; k--) {
 		    for (int j = 0; j < num_x; j++) {
-		        curr = lattice->getUniverse(j, i);
+		        curr = lattice->getUniverse(j,i);
 			fsr_id = lattice->getFSR(j,i);
 			
 			/* recursively call defineMesh until LATTICE level of CMFD mesh is reached */

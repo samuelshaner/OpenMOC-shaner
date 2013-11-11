@@ -49,8 +49,7 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
       _phi_ghost_new[i] = 0.0;
       _phi_ghost_old[i] = 0.0;
   }
-  
-  
+    
   /* If solving diffusion problem, create arrays for FSR parameters */
   if (_solve_method == DIFFUSION){
     _FSR_volumes = (FP_PRECISION*)calloc(_num_fsrs, sizeof(FP_PRECISION));
@@ -109,7 +108,7 @@ void Cmfd::computeXS(){
   /* create pointers to objects */
   Material* fsr_material;
   Material* cell_material;
-  
+
   /* loop over mesh cells */
   for (int i = 0; i < _cells_x * _cells_y; i++){
     
@@ -131,7 +130,7 @@ void Cmfd::computeXS(){
       
       /* loop over FSRs in mesh cell */
       for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
-	
+
 	/* Gets FSR volume, material, and cross sections */
 	fsr_material = _FSR_materials[*iter];
 	cell_material = materials[i];
@@ -718,7 +717,6 @@ void Cmfd::constructMatrices(){
   double* heights = _mesh->getLengthsY();
   double* widths = _mesh->getLengthsX();
 
-  vecZero(_phi_old);
   matZero(_M, _num_groups);
   matZero(_A, _num_groups+4);
 
