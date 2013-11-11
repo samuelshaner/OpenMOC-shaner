@@ -39,8 +39,17 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
   _phi_old = new double[_cells_x*_cells_y*_num_groups];  
   _phi_new = new double[_cells_x*_cells_y*_num_groups];  
   _phi_temp = new double[_cells_x*_cells_y*_num_groups];  
+  _phi_ghost_new = new double[(_cells_x+2)*(_cells_y+2)*_num_groups];  
+  _phi_ghost_old = new double[(_cells_x+2)*(_cells_y+2)*_num_groups];  
   _snew = new double[_cells_x*_cells_y*_num_groups];  
   _sold = new double[_cells_x*_cells_y*_num_groups];
+
+  /* zero ghosted vectors */
+  for (int i = 0; i < (_cells_x+2)*(_cells_y+2)*_num_groups; i++){
+      _phi_ghost_new[i] = 0.0;
+      _phi_ghost_old[i] = 0.0;
+  }
+  
   
   /* If solving diffusion problem, create arrays for FSR parameters */
   if (_solve_method == DIFFUSION){
@@ -61,6 +70,8 @@ Cmfd::~Cmfd() {
   delete [] _phi_old;
   delete [] _phi_new;
   delete [] _phi_temp;
+  delete [] _phi_ghost_new;
+  delete [] _phi_ghost_old;
   delete [] _A;
   delete [] _M;
   delete [] _snew;
@@ -374,166 +385,180 @@ void Cmfd::computeDs(){
  */
 double Cmfd::computeKeff(){
 
-  log_printf(INFO, "Running diffusion solver...");
-
-  /* if solving diffusion problem, initialize timer */
-  if (_solve_method == DIFFUSION)
-    _timer->startTimer();
-  
-  /* initialize variables */
-  double sumnew = 0.0;
-  double sumold = 0.0;
-  int row = 0;
-  double val = 0.0;
-  double norm = 0.0;
-  int iter_in = 0;
-  double scale_val;
-  double conv = 1e0;
-
-  /* compute the cross sections and surface 
-   * diffusion coefficients */
-
-  if (_solve_method == MOC)
-    computeXS();
-  
-  computeDs();
-
-  constructMatrices();
+    log_printf(INFO, "Running diffusion solver...");
     
-  /* get initial source */
-  matMult(_M, _phi_old, _sold);
-  sumold = vecSum(_sold);
-  scale_val = (_cells_x*_cells_y*_num_groups) / sumold;
-  vecScale(_sold, scale_val);
-
-  sumold = _cells_x * _cells_y * _num_groups;
-
-  vecCopy(_phi_old, _phi_new);
-  vecCopy(_phi_old, _phi_temp);
-
-
-  for (int iter = 0; iter < 20000; iter++){
+    /* if solving diffusion problem, initialize timer */
+    if (_solve_method == DIFFUSION)
+	_timer->startTimer();
     
-    /* solver phi = A^-1 * old_source */
-    linearSolve(_A, _phi_new, _sold, conv, _omega);
-
-    /* compute new source */
-    matMult(_M, _phi_new, _snew);
-    sumnew = vecSum(_snew);
+    /* initialize variables */
+    double sumnew = 0.0;
+    double sumold = 0.0;
+    int row = 0;
+    double val = 0.0;
+    double norm = 0.0;
+    int iter_in = 0;
+    double scale_val;
+    double conv = 1e-3;
     
-    /* compute keff */
-    _k_eff = sumnew / sumold;
+    /* compute the cross sections and surface 
+     * diffusion coefficients */
     
-    vecScale(_sold, _k_eff);
-
-    /* compute l2 norm */
-    norm = 0.0;
-    for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-      norm += pow(_snew[i] - _sold[i], 2);
+    if (_solve_method == MOC)
+	computeXS();
     
-    norm = pow(norm, 0.5);
-    norm = norm / (_cells_x*_cells_y*_num_groups);
-    scale_val = (_cells_x*_cells_y*_num_groups) / sumnew;
-    vecScale(_snew, scale_val);
-    vecCopy(_snew, _sold);
+    computeDs();
     
-    log_printf(INFO, "GS POWER iter: %i, keff: %f, error: %f", iter, _k_eff, norm);
-
-    if (norm < _conv_criteria)
-      break;
-  }
-
-  /* rescale the old and new flux */
-  rescaleFlux();
-
-  /* give the petsc flux array to the mesh cell flux array */
-  setMeshCellFlux();
-  
-  /* update the MOC flux */
-  updateMOCFlux();  
-  
-  /* If solving diffusion problem, print timing results */
-  if (_solve_method == DIFFUSION){
-    std::string msg_string;
-    log_printf(TITLE, "TIMING REPORT");
-    _timer->stopTimer();
-    _timer->recordSplit("Total time to solve diffusion eigenvalue problem");
+    constructMatrices();
     
-    double tot_time = _timer->getSplit("Total time to solve diffusion eigenvalue problem");
-    msg_string = "Total time to solve diffusion eigenvalue problem";
-    msg_string.resize(53, '.');
-    log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), tot_time);
-  }
+    /* get initial source */
+    matMultM(_M, _phi_old, _sold);
+    sumold = vecSum(_sold);
+    scale_val = (_cells_x*_cells_y*_num_groups) / sumold;
+    vecScale(_sold, scale_val);
+    
+    sumold = _cells_x * _cells_y * _num_groups;
+    
+    vecCopy(_phi_old, _phi_new, _cells_x, _cells_y);
+        
+    for (int iter = 0; iter < 20000; iter++){
+	
+	/* solver phi = A^-1 * old_source */
+	linearSolve(_A, _phi_new, _sold, conv, _omega);
+	
+	/* compute new source */
+	matMultM(_M, _phi_new, _snew);
+	sumnew = vecSum(_snew);
+	
+	/* compute keff */
+	_k_eff = sumnew / sumold;
+	
+	vecScale(_sold, _k_eff);
+	
+	/* compute l2 norm */
+	norm = 0.0;
+	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+	    norm += pow(_snew[i] - _sold[i], 2);
+	
+	norm = pow(norm, 0.5);
+	norm = norm / (_cells_x*_cells_y*_num_groups);
 
-  return _k_eff;
+	/* scale the new source and pass to old source */
+	scale_val = (_cells_x*_cells_y*_num_groups) / sumnew;
+	vecScale(_snew, scale_val);
+	vecCopy(_snew, _sold, _cells_x, _cells_y);
+	
+	log_printf(INFO, "GS POWER iter: %i, keff: %f, error: %f", iter, _k_eff, norm);
+	
+	if (norm < _conv_criteria)
+	    break;
+    }
+
+    /* rescale the old and new flux */
+    rescaleFlux();
+    
+    /* give the petsc flux array to the mesh cell flux array */
+    setMeshCellFlux();
+    
+    /* update the MOC flux */
+    updateMOCFlux();  
+    
+    /* If solving diffusion problem, print timing results */
+    if (_solve_method == DIFFUSION){
+	std::string msg_string;
+	log_printf(TITLE, "TIMING REPORT");
+	_timer->stopTimer();
+	_timer->recordSplit("Total time to solve diffusion eigenvalue problem");
+	
+	double tot_time = _timer->getSplit("Total time to solve diffusion eigenvalue problem");
+	msg_string = "Total time to solve diffusion eigenvalue problem";
+	msg_string.resize(53, '.');
+	log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), tot_time);
+    }
+
+    return _k_eff;
 }
 
 
 void Cmfd::linearSolve(double* mat, double* vec_x, double* vec_b, double conv, double omega){
 
-  double norm = 0.0;
-  int row = 0;
-  double val = 0.0;
-  int iter_in = 0;
+    double norm = 0.0;
+    int row = 0;
+    double val = 0.0;
+    int iter_in = 0;
 
-  for (iter_in = 0; iter_in < 1000; iter_in++){
-    
-    /* pass new flux to old flux */
-    vecCopy(vec_x, _phi_temp);
-    
-    for (int i = 0; i < _cells_x*_cells_y; i++){
-      for (int g = 0; g < _num_groups; g++){
-	row = (i*_num_groups+g);
-	val = 0.0;
-	
-	val += (1.0 - omega) * vec_x[row];
-	
-	/* source */
-	val += omega * vec_b[row] / mat[row*(_num_groups+4)+g+2];
-	
-	/* left surface */
-	if (i % _cells_x != 0)
-	  val -= omega * vec_x[row-_num_groups] * mat[row*(_num_groups+4)] / 
-	    mat[row*(_num_groups+4)+g+2];
-	
-	/* bottom surface */
-	if (i / _cells_x != _cells_y-1)
-	  val -= omega * vec_x[row+_cells_x*_num_groups] * mat[row*(_num_groups+4)+1] / 
-	    mat[row*(_num_groups+4)+g+2];
-	
-	
-	/* group to group */
-	for (int e = 0; e < _num_groups; e++){
-	  if (e != g)
-	    val -= omega * vec_x[i*_num_groups+e] * mat[row*(_num_groups+4)+2+e] /
-	      mat[row*(_num_groups+4)+2+g];
+    /* copy flux to new ghosted vector */
+    for (int y = 0; y < _cells_y; y++){
+	for (int x = 0; x < _cells_x; x++){
+	    for (int e = 0; e < _num_groups; e++)
+		_phi_ghost_new(x,y,e) = vec_x[(y*_cells_x+x)*_num_groups+e];
 	}
-	
-	/* right surface */
-	if (i % _cells_x != _cells_x-1)
-	  val -= omega * vec_x[row+_num_groups] * mat[row*(_num_groups+4)+_num_groups+2] / 
-	    mat[row*(_num_groups+4)+g+2];
-	
-	/* top surface */
-	if (i / _cells_x != 0)
-	  val -= omega * vec_x[row-_num_groups*_cells_x] * mat[row*(_num_groups+4)+_num_groups+3] / 
-	    mat[row*(_num_groups+4)+g+2];
-
-        vec_x[row] = val;
-      }
     }
     
-    norm = 0.0;
-    for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-      norm += pow(_phi_temp[i] - vec_x[i], 2);
+    /* perform GS iteration */
+    for (iter_in = 0; iter_in < 1000; iter_in++){
+
+	/* pass new flux to old flux */
+	vecCopy(_phi_ghost_new, _phi_ghost_old, _cells_x+2,_cells_y+2);
+	
+	for (int y = 0; y < _cells_y; y++){
+	    for (int x = 0; x < _cells_x; x++){
+		for (int g = 0; g < _num_groups; g++){
+		    row = ((y*_cells_x+x)*_num_groups+g);
+		    val = 0.0;
+		    
+		    val += (1.0 - omega) * _phi_ghost_new(x,y,g);
+		    
+		    /* source */
+		    val += omega * vec_b[row] / mat[row*(_num_groups+4)+g+2];
+		    
+		    /* left surface */
+		    val -= omega * _phi_ghost_new(x-1,y,g) * mat[row*(_num_groups+4)] / 
+			mat[row*(_num_groups+4)+g+2];
+		    
+		    /* bottom surface */
+		    val -= omega * _phi_ghost_new(x,y+1,g) * mat[row*(_num_groups+4)+1] / 
+			mat[row*(_num_groups+4)+g+2];
+		    
+		    /* group to group */
+		    for (int e = 0; e < _num_groups; e++){
+			if (e != g)
+			    val -= omega * _phi_ghost_new(x,y,e) * mat[row*(_num_groups+4)+2+e] /
+				mat[row*(_num_groups+4)+2+g];
+		    }
+		    
+		    /* right surface */
+		    val -= omega * _phi_ghost_new(x+1,y,g) * mat[row*(_num_groups+4)+_num_groups+2] / 
+			mat[row*(_num_groups+4)+g+2];
+		    
+		    /* top surface */
+		    val -= omega * _phi_ghost_new(x,y-1,g) * mat[row*(_num_groups+4)+_num_groups+3] / 
+			mat[row*(_num_groups+4)+g+2];
+		    
+		    _phi_ghost_new(x,y,g) = val;
+		}
+	    }
+	}
+	
+	norm = 0.0;
+	for (int i = 0; i < (_cells_x+2)*(_cells_y+2)*_num_groups; i++)
+	    norm += pow((_phi_ghost_old[i] - _phi_ghost_new[i])/(_phi_ghost_old[i]+1e-10), 2);
+	
+	norm = pow(norm, 0.5) / (_cells_x*_cells_y*_num_groups);
+	
+	if (norm < conv)
+	    break;
+    }
+
+    /* copy ghosted vector to flux */
+    for (int y = 0; y < _cells_y; y++){
+	for (int x = 0; x < _cells_x; x++){
+	    for (int e = 0; e < _num_groups; e++)
+		vec_x[(y*_cells_x+x)*_num_groups+e] = _phi_ghost_new(x,y,e);
+	}
+    }
     
-    norm = pow(norm, 0.5);
-
-    if (norm < conv)
-      break;
-  }
-
-  log_printf(INFO, "linear solver iters: %i", iter_in);
+    log_printf(INFO, "linear solver iters: %i", iter_in);
 }
 
 
@@ -543,17 +568,17 @@ void Cmfd::linearSolve(double* mat, double* vec_x, double* vec_b, double conv, d
  */
 void Cmfd::rescaleFlux(){
 
-  double sumnew, sumold, scale_val;
-
-  matMult(_M, _phi_new, _snew);
-  sumnew = vecSum(_snew);
-  scale_val = _cells_x*_cells_y*_num_groups / sumnew;
-  vecScale(_phi_new, scale_val);
-  matMult(_M, _phi_old, _sold);
-  sumold = vecSum(_sold);
-  scale_val = _cells_x*_cells_y*_num_groups / sumold;
-  vecScale(_phi_old, scale_val);
-
+    double sumnew, sumold, scale_val;
+    
+    matMultM(_M, _phi_new, _snew);
+    sumnew = vecSum(_snew);
+    scale_val = _cells_x*_cells_y*_num_groups / sumnew;
+    vecScale(_phi_new, scale_val);
+    matMultM(_M, _phi_old, _sold);
+    sumold = vecSum(_sold);
+    scale_val = _cells_x*_cells_y*_num_groups / sumold;
+    vecScale(_phi_old, scale_val);
+    
 }
 
 
@@ -573,7 +598,7 @@ void Cmfd::vecSet(double* vec, double val){
 void Cmfd::vecNormal(double* mat, double* vec){
   
   double source, scale_val;
-  matMult(mat, vec, _phi_temp);
+  matMultM(mat, vec, _phi_temp);
   source = vecSum(_phi_temp);
   scale_val = (_cells_x*_cells_y*_num_groups) / source;
   vecScale(vec, scale_val);
@@ -581,7 +606,7 @@ void Cmfd::vecNormal(double* mat, double* vec){
 }
 
 
-void Cmfd::matMult(double* mat, double* vec_x, double* vec_y){
+void Cmfd::matMultM(double* mat, double* vec_x, double* vec_y){
 
   vecZero(vec_y);
 
@@ -595,20 +620,55 @@ void Cmfd::matMult(double* mat, double* vec_x, double* vec_y){
 }
 
 
-double Cmfd::vecSum(double* vec){
+void Cmfd::matMultA(double* mat, double* vec_x, double* vec_y){
 
-  double sum = 0.0;
-  
-  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-      sum += vec[i];
-
-  return sum;
+    vecZero(vec_y);
+    int row;
+    
+    for (int y = 0; y < _cells_y; y++){
+	for (int x = 0; x < _cells_x; x++){
+	    for (int g = 0; g < _num_groups; g++){
+		row = (y*_cells_x+x)*_num_groups + g;
+		
+		/* left surface */
+		if (x != 0)
+		    vec_y[row] += mat[row*(_num_groups+4)] * vec_x[(y*_cells_x+x-1)*_num_groups +g]; 
+		
+		/* bottom surface */
+		if (y != _cells_y - 1)
+		    vec_y[row] += mat[row*(_num_groups+4)+1] * vec_x[((y+1)*_cells_x+x)*_num_groups +g]; 
+		
+		/* right surface */
+		if (x != _cells_x-1)
+		    vec_y[row] += mat[row*(_num_groups+4)+_num_groups+2] * vec_x[(y*_cells_x+x+1)*_num_groups +g]; 
+		
+		/* top surface */
+		if (y != 0)
+		    vec_y[row] += mat[row*(_num_groups+4)+_num_groups+3] * vec_x[((y-1)*_cells_x+x)*_num_groups +g]; 
+		
+		for (int e = 0; e < _num_groups; e++){
+		    vec_y[row] += mat[row*(_num_groups+4)+2+e] * vec_x[(y*_cells_x+x)*_num_groups+e];
+		}
+	    }
+	}
+    } 
 }
 
 
-void Cmfd::vecCopy(double* vec_from, double* vec_to){
+double Cmfd::vecSum(double* vec){
+    
+    double sum = 0.0;
+      
+    for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+	sum += vec[i];
+    
+    return sum;
+}
 
-  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+
+void Cmfd::vecCopy(double* vec_from, double* vec_to, int x_len, int y_len){
+
+  for (int i = 0; i < x_len*y_len*_num_groups; i++)
     vec_to[i] = vec_from[i];
 }
 
@@ -790,12 +850,6 @@ void Cmfd::constructMatrices(){
 	  else
 	    _M[col*(_num_groups)+e] += value; 
 	}
-
-	for (int i = 0; i < _num_groups+4; i++)
-	  log_printf(DEBUG, "cell: %i, group: %i, i: %i, val: %f", cell, e, i, _A[row*(_num_groups+4)+i]);
-
-
-
       }
     }
   }

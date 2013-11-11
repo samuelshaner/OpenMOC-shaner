@@ -62,7 +62,6 @@ public:
     virtual void setNumEnergyGroups(const int num_groups, const int num_time_steps);
 
     /* set sigma a */
-    virtual void setSigmaA(double* xs, int num_groups);
     void setSigmaATime(int num_time_steps, int num_groups, double* xs);
     
     /* copy and clone material */
@@ -76,6 +75,7 @@ public:
     void sigmaAFuncTemp(bool func_temp);
 
     /* set bool for time functional properties */
+    virtual void setSigmaA(double* xs, int num_groups);
     void sigmaAFuncTime(bool func_time);
 
     /* set and get gamma, the doppler feedback coefficient */

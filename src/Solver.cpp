@@ -407,10 +407,8 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     flattenFSRSources(1.0);
     zeroTrackFluxes();
 
-#ifdef CMFD
     initializeCmfd();
     FP_PRECISION cmfd_keff;
-#endif
 
     /* Source iteration loop */
     for (int i=0; i < max_iterations; i++) {
@@ -423,10 +421,8 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 	transportSweep();	
 	addSourceToScalarFlux();
 
-#ifdef CMFD
 	if (_cmfd->getMesh()->getAcceleration())
 	  cmfd_keff = _cmfd->computeKeff();
-#endif	
 
 	computeKeff();
 

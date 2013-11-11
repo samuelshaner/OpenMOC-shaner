@@ -16,38 +16,41 @@
  * Material states
  */
 enum materialState {
-	REFERENCE,
-	PREVIOUS_CONV,
-	PREVIOUS,
-	CURRENT,
-	FORWARD,
-	ADJ
+    REFERENCE,
+    PREVIOUS_CONV,
+    PREVIOUS,
+    CURRENT,
+    FORWARD,
+    ADJ
 };
 
 class TimeStepper {
 private:
-  double _start_time;
-  double _end_time;
-  double* _state_times;
-  double _dt_outer;
-  double _dt_intermediate;
-  
+    double _start_time;
+    double _end_time;
+    double* _state_times;
+    double _dt_moc;
+    double _dt_cmfd;
+    
 public:
-  TimeStepper(double start_time, double end_time, double dt_outer, double dt_intermediate);
-  virtual ~TimeStepper();
-  
-  double getStartTime();
-  double getEndTime();
-  void takeOuterStep();
-  void takeIntermediateStep();
-  void convergedOuterStep();
-  void setTime(materialState state, double time);
-  double getImprovedRatio();
-  double getTime(materialState state);
-  double getDtOuter();
-  double getDtIntermediate();
-  void printTimes();
-  void incrementTime(materialState state, double dt);
+    TimeStepper(double start_time, double end_time, double dt_moc, double dt_cmfd);
+    
+    virtual ~TimeStepper();
+    
+    /* setters and workers */
+    void takeStep();
+    void setTime(materialState state, double time);
+    void convergedMOCStep();
+    void printTimes();
+    void incrementTime(materialState state, double dt);
+        
+    /* getters */
+    double getStartTime();
+    double getEndTime();
+    double getImprovedRatio();
+    double getTime(materialState state);
+    double getDtMOC();
+    double getDtCMFD();
 };
 
 #endif

@@ -65,15 +65,15 @@ void FunctionalMaterial::setNumEnergyGroups(const int num_groups, const int num_
  */
 void FunctionalMaterial::setSigmaA(double* xs, int num_groups) {
 
-  if (_num_groups != num_groups)
-    log_printf(ERROR, "Unable to set sigma_a with %d groups for material "
-	       "%d which contains %d energy groups", num_groups,
-	       _num_groups);
+    if (_num_groups != num_groups)
+	log_printf(ERROR, "Unable to set sigma_a with %d groups for material "
+		   "%d which contains %d energy groups", num_groups,
+		   _num_groups);
   
-  Material::setSigmaA(xs, num_groups);
+    Material::setSigmaA(xs, num_groups);
 
-  for (int i=0; i < _num_groups; i++)
-    _sigma_a_ref[i] = xs[i];
+    for (int i=0; i < _num_groups; i++)
+	_sigma_a_ref[i] = xs[i];
 }
 
 
@@ -90,11 +90,16 @@ void FunctionalMaterial::setSigmaATime(int num_time_steps, int num_groups, doubl
 	       "%d which contains %d energy groups", num_groups,
 	       _num_groups);
 
-  Material::setSigmaA(xs, num_groups);
-  
   /* load _sigma_t_ref with all xs */
   for (int i = 0; i < num_time_steps*num_groups; i++)
     _sigma_a_ref[i] = xs[i];
+
+    for (int i = 0; i < _num_groups; i++){
+      _sigma_a[i] = xs[i];
+      
+      if (_buckling != NULL && _dif_coef != NULL)
+        _sigma_a[i] += _buckling[i] * _dif_coef[i];
+    }
 }
 
 
@@ -177,8 +182,6 @@ void FunctionalMaterial::sync(materialState state){
   /* SIGMA_A */
   for (int g = 0; g < _num_groups; g++){
     
-    double old_xs = _sigma_a[g];
-
     if (_sigma_a_func_time){
       _sigma_a[g] = interpolateXS(_sigma_a_ref, state, g);
     }

@@ -36,6 +36,10 @@ enum fluxType {
 	ADJOINT
 };
 
+/** Indexing macro for the ghosted flux vectors */
+#define _phi_ghost_new(x,y,e) (_phi_ghost_new[((y+1)*(_cells_x+2) + x + 1) * _num_groups + e])
+#define _phi_ghost_old(x,y,e) (_phi_ghost_old[((y+1)*(_cells_x+2) + x + 1) * _num_groups + e])
+
 class Cmfd {
 
 protected:
@@ -60,6 +64,8 @@ protected:
   double* _sold;
   double* _snew;
   double* _phi_temp;
+  double* _phi_ghost_new;
+  double* _phi_ghost_old;
 
   /* l2 norm */
   double _l2_norm;
@@ -123,11 +129,12 @@ public:
   void setFluxType(const char* flux_type);
 
   void vecZero(double* my_vec);
-  void matMult(double* mat, double* vec_1, double* vec_2);
+  void matMultM(double* mat, double* vec_1, double* vec_2);
+  void matMultA(double* mat, double* vec_1, double* vec_2);
   void linearSolve(double* mat, double* vec_x, double* vec_b, double conv, double omega);
   void vecScale(double* vec, double scale_val);
   double vecSum(double* vec);
-  void vecCopy(double* vec_from, double* vec_to);
+  void vecCopy(double* vec_from, double* vec_to, int x_len, int y_len);
   void matZero(double* mat, int width);
   void dumpVec(double* vec, int length);
   void setOmega(double omega);

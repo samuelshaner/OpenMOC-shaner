@@ -45,14 +45,6 @@ Mesh::Mesh(solveType solve_type, bool cmfd_on, double relax_factor, int mesh_lev
   _lengths_x = NULL;
   _lengths_y = NULL;
 
-#ifndef CMFD
-  if (cmfd_on)
-    log_printf(ERROR, "The Cmfd package was not included in this OpenMOC "
-	       "module. If you want to run a diffusion or cmfd-accelerated "
-	       "MOC simulation, please recompile with the cmfd set to cmfd-on");
-#endif
-    
-
 }
 
 
