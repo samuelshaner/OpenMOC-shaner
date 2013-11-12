@@ -1,45 +1,78 @@
 /*
- * Cmfd.cpp
+ * Tcmfd.cpp
  *
  *  Created on: September 8, 2013
- *      Author: Sam Shaner
- *				MIT, Course 22
- *              shaner@mit.edu
+ *  Author: Sam Shaner
+ *  MIT, Course 22
+ *  shaner@mit.edu
  */
 
-#include "CmfdTransient.h"
+#include "TCmfd.h"
 
 /**
- * CmfdTransient constructor
+ * Tcmfd constructor
  * @param geom pointer to the geometry
  * @param criteria convergence criterial on keff 
  */
-CmfdTransient::CmfdTransient(Geometry* geometry, double criteria) :
-    Cmfd(geometry, criteria){
+Tcmfd::Tcmfd(Geometry* geometry, double criteria){
     
     /* Boolean and Enum flags to toggle features */
     _transient_method = ADIABATIC;
+    _geom  = geometry;
+    _mesh  = geometry->getMesh();
+    _timer = new Timer();
+
+    /* integert values */
+    _cells_x    = _mesh->getCellsX();
+    _cells_y    = _mesh->getCellsY();
+    _num_groups = _mesh->getNumGroups();
+    _nc         = _num_groups*_cells_x*_cells_y;
+
+    /* float values */
+    _omega         = 1.0;
+    _conv_criteria = criteria;
+    _k_eff_0       = 1.0;
+    _beta_sum      = 0.0;
+    _dt_cmfd       = 1e-4;
+
+    /* Boolean and Enum flags to toggle features */
+    _solve_method = _mesh->getSolveType();
     
-    /* create vector objects */
-    _b       = new double[_cells_x*_cells_y*_num_groups];
-    _b_prime = new double[_cells_x*_cells_y*_num_groups];
-    
+    /* Create matrix and vector objects */
+    _M         = new double[_nc*_num_groups];
+    _A         = new double[_nc*(4+_num_groups)];
+    _phi_temp  = new double[_nc];  
+    _snew      = new double[_nc];  
+    _sold      = new double[_nc];
+    _b         = new double[_nc];
+    _b_prime   = new double[_nc];
+    _phi_new   = NULL;
+    _phi_old   = NULL;
+
     /* transient parameters */
-    _lambda = NULL;
-    _beta = NULL;
-    _velocity = NULL;
-    _k_eff_0 = 1.0;
+    _lambda        = NULL;
+    _beta          = NULL;
+    _velocity      = NULL;
     _initial_state = true;
+
+    /* If solving diffusion problem, create arrays for FSR parameters */
+    if (_solve_method == DIFFUSION)
+	_mesh->initializeSurfaceCurrents();
     
 }
 
 /**
  * cmfd Destructor clears all memory
  */
-CmfdTransient::~CmfdTransient() {
+Tcmfd::~Tcmfd() {
 
     delete [] _b;
     delete [] _b_prime;
+    delete [] _M;
+    delete [] _A;
+    delete [] _phi_temp;
+    delete [] _snew;
+    delete [] _sold;
 
 }
 
@@ -51,52 +84,49 @@ CmfdTransient::~CmfdTransient() {
  * @param iteration number of in MOC solver - used for plotting
  * @return k-effective
  */
-double CmfdTransient::computeKeff(fluxType flux_method){
+void Tcmfd::solveTCMFD(){
 
     log_printf(INFO, "Running cmfd diffusion diffusion solver...");
     
     /* initialize variables */
     int iter = 0;
     double norm = 0.0;
-    double sumold, sumnew, scale_val, eps;
-    double val = 0.0;
-    int row = 0;
-    int iter_in = 0;
     double conv = 1e-3;
     
-    _flux_method = flux_method;
-    
     if (_solve_method == MOC)
-	computeXS();
+	_mesh->computeXS();
     
-    computeDs();
+    _mesh->computeDs();
     
+    _phi_old = _mesh->getFluxes(PREVIOUS);
+    _phi_new = _mesh->getFluxes(CURRENT);
+
     /* construct matrices */
     constructMatrices();
     
     /* get initial source and find initial k_eff */
-    matMultM(_M, _phi_new, _snew);
+    matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
 
     /* perform power iterations to converge the flux */
     for (iter = 0; iter < 20000; iter++){
 	
 	/* solve A * b = phi_new */
-	vecWAXPY(_b_prime, 1.0, _snew, _b);
-	linearSolve(_A, _phi_new, _b_prime, conv, _omega);
+	vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
+	linearSolve(_A, _phi_new, _b_prime, _phi_temp, conv, _omega, _cells_x, _cells_y, _num_groups);
 	
 	/* computed the new source */
-	matMultM(_M, _phi_new, _snew);
+	matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
 	
 	/* compute the L2 norm of source error */
 	norm = 0.0;
-	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+	for (int i = 0; i < _nc; i++)
 	    norm += pow((_snew[i] - _sold[i])/(_snew[i]+1e-15), 2);
 
 	norm = pow(norm, 0.5);
-	norm = norm / (_cells_x*_cells_y*_num_groups);
+	norm = norm / _nc;
 
 	/* copy new source to old */
-	vecCopy(_snew, _sold, _cells_x, _cells_y);
+	vecCopy(_snew, _sold, _nc);
 	
 	/* check for convergence */
 	if (norm < _conv_criteria)
@@ -104,21 +134,6 @@ double CmfdTransient::computeKeff(fluxType flux_method){
     }
 
     log_printf(INFO, "CMFD iter: %i", iter);
-    
-    /* give the petsc flux array to the mesh cell flux array */
-    setMeshCellFlux();
-
-    return _k_eff;
-}
-
-
-void CmfdTransient::vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y){
-    
-    vecZero(vec_w);
-    
-    for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++){
-	vec_w[i] = a * vec_x[i] + vec_y[i];
-    }    
 }
 
 
@@ -129,7 +144,7 @@ void CmfdTransient::vecWAXPY(double* vec_w, double a, double* vec_x, double* vec
  * @param solve methed - either DIFFUSION or CMFD
  * @return petsc error indicator
  */
-void CmfdTransient::constructMatrices(){
+void Tcmfd::constructMatrices(){
 
     log_printf(INFO,"Constructing cmfd transient matrices transient...");
     
@@ -139,14 +154,12 @@ void CmfdTransient::constructMatrices(){
     int cell;
     
     Material **materials = _mesh->getMaterials();
-    double* old_flux = _mesh->getFluxes(PREVIOUS);
-    double* new_flux = _mesh->getFluxes(CURRENT);
     double* heights = _mesh->getLengthsY();
     double* widths = _mesh->getLengthsX();
     
-    vecZero(_b);
-    matZero(_M, _num_groups);
-    matZero(_A, _num_groups*4);
+    vecZero(_b, _nc);
+    matZero(_M, _num_groups, _nc);
+    matZero(_A, _num_groups*4, _nc);
 
     /* loop over mesh cells in y direction */
     for (int y = 0; y < _cells_y; y++){
@@ -161,12 +174,8 @@ void CmfdTransient::constructMatrices(){
 		
 		row = cell*_num_groups+e;
 		
-		/* flux */
-		_phi_old[row] = old_flux[cell*_num_groups + e];
-		_phi_new[row] = new_flux[cell*_num_groups + e];
-		
 		/* old flux and delayed neutron precursors */
-		_b[row] = old_flux[cell*_num_groups + e] / (_velocity[e] * _dt_cmfd) * _mesh->getVolumes()[cell];
+		_b[row] = _phi_old[cell*_num_groups + e] / (_velocity[e] * _dt_cmfd) * _mesh->getVolumes()[cell];
 
 		if (materials[cell]->getType() == FUNCTIONAL){
 		    for (int dg = 0; dg < _num_delay_groups; dg++){
@@ -185,33 +194,15 @@ void CmfdTransient::constructMatrices(){
 		}
 		
 		/* scattering terms */
-		if (_flux_method == PRIMAL){
-		    for (int g = 0; g < _num_groups; g++){
-			if (e != g){
-			    /* out scattering */
-			    value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell]; 
-			    _A[row*(_num_groups+4)+e+2] += value;	      
-			    
-			    /* in scattering */
-			    value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];			    			    
-			    _A[row*(_num_groups+4)+g+2] += value;
-			}
-		    }
-		}
-		else{
-		    for (int g = 0; g < _num_groups; g++){
-			if (e != g){
-			    
-			    /* out scattering */
-			    col = cell*_num_groups+e;
-			    value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell];
-			    _A[col*(_num_groups+4)+e+2] += value;
-
-			    /* in scattering */
-			    col = cell*_num_groups+g;
-			    value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
-			    _A[col*(_num_groups+4)+e+2] += value;
-			}
+		for (int g = 0; g < _num_groups; g++){
+		    if (e != g){
+			/* out scattering */
+			value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell]; 
+			_A[row*(_num_groups+4)+e+2] += value;	      
+			
+			/* in scattering */
+			value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];			    			    
+			_A[row*(_num_groups+4)+g+2] += value;
 		    }
 		}
 		
@@ -297,61 +288,52 @@ void CmfdTransient::constructMatrices(){
 		    			
 		    col = cell*_num_groups+g;
 		    
-		    if (_flux_method == PRIMAL)
-			_M[row*_num_groups+g] += value; 
-		    else
-			_M[col*(_num_groups)+e] += value; 
+		    _M[row*_num_groups+g] += value; 
 		}
 	    }
 	}
     }
     
     log_printf(INFO,"Done constructing matrices...");
-
 }
 
 
-void CmfdTransient::setTransientType(transientType trans_type){
+void Tcmfd::setTransientType(transientType trans_type){
   _transient_method = trans_type;
 }
 
-transientType CmfdTransient::getTransientType(){
+
+transientType Tcmfd::getTransientType(){
   return _transient_method;
 }
 
-void CmfdTransient::setKeff0(double keff_0){
+
+void Tcmfd::setKeff0(double keff_0){
   _k_eff_0 = keff_0;
 }
 
 
-void CmfdTransient::initialize(TimeStepper* time_stepper){
-
-  Material **materials = _mesh->getMaterials();
-  _time_stepper = time_stepper;
-
-  if (_solve_method == MOC){
-    for (int i = 0; i < _num_fsrs; i++){
-      if (_FSR_materials[i]->getType() == FUNCTIONAL){
-      static_cast<FunctionalMaterial*>(_FSR_materials[i])->setTimeStepper(time_stepper);
-      }
-    }
-  }
+void Tcmfd::setTimeStepper(TimeStepper* time_stepper){
+    _time_stepper = time_stepper; 
 }
 
 
-double* CmfdTransient::getBeta(){
+double* Tcmfd::getBeta(){
   return _beta;
 }
 
-double* CmfdTransient::getLambda(){
+
+double* Tcmfd::getLambda(){
   return _lambda;
 }
 
-double* CmfdTransient::getVelocity(){
+
+double* Tcmfd::getVelocity(){
   return _velocity;
 }
 
-void CmfdTransient::setBeta(double* beta, int num_delay_groups){
+
+void Tcmfd::setBeta(double* beta, int num_delay_groups){
 
   _beta = new double[num_delay_groups];
   _beta_sum = 0.0;
@@ -364,7 +346,7 @@ void CmfdTransient::setBeta(double* beta, int num_delay_groups){
 }
 
 
-void CmfdTransient::setLambda(double* decay_const, int num_delay_groups){
+void Tcmfd::setLambda(double* decay_const, int num_delay_groups){
 
   _lambda = new double[num_delay_groups];
   
@@ -374,7 +356,7 @@ void CmfdTransient::setLambda(double* decay_const, int num_delay_groups){
 }
 
 
-void CmfdTransient::setVelocity(double* velocity, int num_groups){
+void Tcmfd::setVelocity(double* velocity, int num_groups){
 
   _velocity = new double[num_groups];
   
@@ -384,16 +366,26 @@ void CmfdTransient::setVelocity(double* velocity, int num_groups){
 }
 
 
-void CmfdTransient::setDtCMFD(double dt){
+void Tcmfd::setDtCMFD(double dt){
     _dt_cmfd = dt;
 }
 
 
-void CmfdTransient::setInitialState(bool state){
+void Tcmfd::setInitialState(bool state){
     _initial_state = state;
 }
 
 
-void CmfdTransient::setNumDelayGroups(int num_groups){
+void Tcmfd::setNumDelayGroups(int num_groups){
     _num_delay_groups = num_groups;
+}
+
+
+Mesh* Tcmfd::getMesh(){
+    return _mesh;
+}
+
+
+void Tcmfd::setOmega(double omega){
+    _omega = omega;
 }

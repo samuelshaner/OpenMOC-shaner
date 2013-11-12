@@ -561,8 +561,8 @@ void Solver::initializeCmfd(){
 
     log_printf(INFO, "initializing cmfd...");
 
-    _cmfd->setFSRVolumes(_FSR_volumes);
-    _cmfd->setFSRMaterials(_FSR_materials);
-    _cmfd->setFSRFluxes(_scalar_flux);
+    _cmfd->getMesh()->setFSRVolumes(_FSR_volumes);
+    _cmfd->getMesh()->setFSRMaterials(_FSR_materials);
+    _cmfd->getMesh()->setFSRFluxes(_scalar_flux);
     _cmfd->getMesh()->setSurfaceCurrents(_surface_currents);
 }

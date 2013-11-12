@@ -120,7 +120,7 @@ lra_materials['region_5']['Absorption XS'] = [0.008002, 0.08344]
 
 lra_materials['region_5']['Total XS'] = [0.2648, 1.5941]
 
-lra_materials['region_5']['Scattering XS'] = [0.230462, 0.02617, 0.00, 1.510672]
+lra_materials['region_5']['Scattering XS'] = [0.230502, 0.02617, 0.00, 1.510639]
 
 lra_materials['region_5']['Fission XS'] = [0.002, 0.045]
 

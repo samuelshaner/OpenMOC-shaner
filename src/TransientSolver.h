@@ -17,16 +17,18 @@
 #include "Geometry.h"
 #include "Quadrature.h"
 #include "log.h"
-#include "CmfdTransient.h"
+#include "Tcmfd.h"
 #include "Mesh.h"
-#include "Solver.h"
+#include "Cmfd.h"
+#include "ThreadPrivateSolverTransient.h"
 #include "Timer.h"
 #include "TimeStepper.h"
 
 class TransientSolver {
 private:
     Geometry* _geom;
-    CmfdTransient* _cmfd;
+    Tcmfd* _tcmfd;
+    Cmfd* _cmfd;
     Solver* _solver;
     TimeStepper* _ts;
     Material** _materials;
@@ -55,7 +57,7 @@ private:
     
     
 public:
-    TransientSolver(Geometry* geom, CmfdTransient* cmfd,
+    TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd,
 		    Solver* solver=NULL);
     virtual ~TransientSolver();
     

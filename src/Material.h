@@ -167,6 +167,7 @@ public:
 
     materialType getType();
     void copySigmaS(Material* material);
+    void copySigmaA(Material* material);
 };
 
 

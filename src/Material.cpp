@@ -1006,8 +1006,7 @@ Material* Material::clone(){
       for (int s = 0; s < 4; s++)
 	material_clone->setDifTildeByGroup(_dif_tilde[s*_num_groups+i], i, s);  
 
-  material_clone->setSigmaA(_sigma_a, _num_groups);
-
+  copySigmaA(material_clone);
   copySigmaS(material_clone);
 
   material_clone->setTemperature(REFERENCE, getTemperature(REFERENCE));
@@ -1028,6 +1027,14 @@ void Material::copySigmaS(Material* material){
     for (int j=0; j < _num_groups; j++){
       material->setSigmaSByGroup(_sigma_s[i*_num_groups+j], i, j);
     }
+  }
+}
+
+
+void Material::copySigmaA(Material* material){
+
+  for (int i=0; i < _num_groups; i++){
+      material->setSigmaAByGroup(_sigma_a[i], i);
   }
 }
 

@@ -19,6 +19,7 @@
 #include "LocalCoords.h"
 #include "Surface.h"
 #include "FunctionalMaterial.h"
+#include "Quadrature.h"
 
 /**
  * Solve types
@@ -35,6 +36,9 @@ private:
   /* physical mesh size */
   double _length_x;
   double _length_y;
+
+  /* pointer to quadrature object */
+  Quadrature* _quad;
 
   /* cmfd level */
   int _mesh_level;
@@ -91,6 +95,10 @@ private:
   double* _bounds_x;
   double* _bounds_y;
 
+  Material** _FSR_materials;
+  FP_PRECISION* _FSR_volumes;
+  FP_PRECISION* _FSR_fluxes;
+
   /* bool to toggle optically thick diffusion correction factor */
   bool _optically_thick;
 
@@ -104,6 +112,11 @@ public:
   void initialize();
   void setFSRBounds();
   void setCellBounds();
+
+  void computeDs();
+  void computeXS();
+  double computeDiffCorrect(double d, double h);
+  void updateMOCFlux();
 
   /* get mesh parameters */
   double getLengthX();
@@ -166,6 +179,11 @@ public:
   double getLeakage(materialState state, int group, bool adj_weight);
   void dumpFlux(materialState state);
   void dumpXS();
+
+  void setFSRMaterials(Material** FSR_materials);
+  void setFSRVolumes(FP_PRECISION* FSR_volumes);
+  void setFSRFluxes(FP_PRECISION* scalar_flux);
+  Material** getFSRMaterials();
 
 };
 

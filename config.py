@@ -136,6 +136,7 @@ class configuration:
                       'src/Solver.cpp',
                       'src/CPUSolver.cpp',
                       'src/ThreadPrivateSolver.cpp',
+                      'src/ThreadPrivateSolverTransient.cpp',
                       'src/Surface.cpp',
                       'src/Timer.cpp',
                       'src/Track.cpp',
@@ -143,7 +144,7 @@ class configuration:
                       'src/Universe.cpp',
                       'src/Cmfd.cpp',
                       'src/Mesh.cpp',
-                      'src/CmfdTransient.cpp',
+                      'src/Tcmfd.cpp',
                       'src/TimeStepper.cpp',
                       'src/TransientSolver.cpp',
                       'src/FunctionalMaterial.cpp']

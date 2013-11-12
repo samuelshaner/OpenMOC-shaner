@@ -12,6 +12,7 @@
     #include "../src/Solver.h"
     #include "../src/CPUSolver.h"
     #include "../src/ThreadPrivateSolver.h"
+    #include "../src/ThreadPrivateSolverTransient.h"
     #include "../src/Surface.h"
     #include "../src/Timer.h"
     #include "../src/Track.h" 
@@ -19,10 +20,11 @@
     #include "../src/Universe.h"
     #include "../src/Cmfd.h"
     #include "../src/Mesh.h"
-    #include "../src/CmfdTransient.h"
+    #include "../src/Tcmfd.h"
     #include "../src/TransientSolver.h"
     #include "../src/FunctionalMaterial.h"
     #include "../src/TimeStepper.h"
+
 
     #define printf PySys_WriteStdout
 
@@ -324,6 +326,7 @@
 %include ../src/Solver.h
 %include ../src/CPUSolver.h
 %include ../src/ThreadPrivateSolver.h
+%include ../src/ThreadPrivateSolverTransient.h
 %include ../src/Surface.h
 %include ../src/Timer.h
 %include ../src/Track.h
@@ -331,10 +334,11 @@
 %include ../src/Universe.h
 %include ../src/Cmfd.h
 %include ../src/Mesh.h
-%include ../src/CmfdTransient.h
+%include ../src/Tcmfd.h
 %include ../src/TimeStepper.h
 %include ../src/TransientSolver.h
 %include ../src/FunctionalMaterial.h
+
 
 #ifdef DOUBLE
 typedef double FP_PRECISION;

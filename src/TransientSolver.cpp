@@ -6,14 +6,15 @@
  * @param cmfd pointer to the cmfdTransient
  * @param solver pointer to the solver
  */
-TransientSolver::TransientSolver(Geometry* geom, CmfdTransient* cmfd, Solver* solver){
+TransientSolver::TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd, Solver* solver){
 
   log_printf(NORMAL, "Creating transient object...");
   
+  _tcmfd = tcmfd;
   _cmfd = cmfd;
   _geom = geom;
   _solver = solver;
-  _mesh = _cmfd->getMesh();
+  _mesh = _tcmfd->getMesh();
   _materials = _mesh->getMaterials();
   _solve_method = _mesh->getSolveType();
   _num_groups = _geom->getNumEnergyGroups();
@@ -23,7 +24,6 @@ TransientSolver::TransientSolver(Geometry* geom, CmfdTransient* cmfd, Solver* so
   computeVolCore();
 
   _mesh->createNewFlux(REFERENCE);
-
 }
 
 /**
@@ -36,30 +36,33 @@ TransientSolver::~TransientSolver() {
 void TransientSolver::solveInitialState(){
 
     log_printf(NORMAL, "Solving time dependent problem...");
-    
+
     /* initialize the time stepper and transient material properties */
     initializeTimeStepper();
     initializeTransientMaterials();
     
     /* compute initial shape function */
-    _k_eff_0 = static_cast<Cmfd*>(_cmfd)->computeKeff();
+    if (_solve_method == DIFFUSION)
+	_k_eff_0 = _cmfd->computeKeff();
+    else
+	_k_eff_0 = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);    
     
     /* set the initial eigenvalue in the cmfd solver */
     log_printf(NORMAL, "k_eff_0: %f", _k_eff_0);
-    _cmfd->setKeff0(_k_eff_0);
-    
+    _tcmfd->setKeff0(_k_eff_0);
+
     _mesh->copyFlux(CURRENT, PREVIOUS);
 
     /* compute the power normalization factor */
     _power_factor = _power_init / computePower();
-    _cmfd->vecScale(_mesh->getFluxes(PREVIOUS), _power_factor);
-    _cmfd->vecScale(_mesh->getFluxes(CURRENT), _power_factor);
+    vecScale(_mesh->getFluxes(PREVIOUS), _power_factor, _num_groups*_mesh->getNumCells());
+    vecScale(_mesh->getFluxes(CURRENT), _power_factor, _num_groups*_mesh->getNumCells());
         
     /* initialize the precursor concentration and PKE matrices */
     initializePrecursorConc();
     copyPrecConc(CURRENT, PREVIOUS);
         
-    _cmfd->setInitialState(false);
+    _tcmfd->setInitialState(false);
     
     /* save initial global parameters */
     _time.push_back(0.0);
@@ -75,7 +78,6 @@ void TransientSolver::solveOuterStep(){
     double tolerance_out = 1.e-6;
     int length_conv = _power.size();
     double residual_out = 1.0;
-    double keff;
     int iter = 0;
     
     if (_ts->getTime(CURRENT) == _start_time)
@@ -88,7 +90,7 @@ void TransientSolver::solveOuterStep(){
 
     while (residual_out > tolerance_out){
 	_mesh->copyFlux(CURRENT, REFERENCE);
-	_cmfd->computeKeff();
+	_tcmfd->solveTCMFD();
 	updateTemperatures();
 	updatePrecursorConc();
 	syncMaterials(CURRENT);	
@@ -242,9 +244,9 @@ void TransientSolver::initializePrecursorConc(){
 	    }
 	    
 	    if (power > 0.0){
-		static_cast<FunctionalMaterial*>(_materials[i])->setPrecConc(REFERENCE,     _cmfd->getBeta()[dg] / _cmfd->getLambda()[dg] * power, dg);
+		static_cast<FunctionalMaterial*>(_materials[i])->setPrecConc(REFERENCE, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power, dg);
 		
-		log_printf(DEBUG, "cell: %i, dg: %i, initial prec: %f", i, dg, _cmfd->getBeta()[dg] / _cmfd->getLambda()[dg] * power);
+		log_printf(DEBUG, "cell: %i, dg: %i, initial prec: %f", i, dg, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power);
 	    }
 	}
     }
@@ -278,8 +280,8 @@ void TransientSolver::updatePrecursorConc(){
 	    
 	    if (_materials[i]->isFissionable()){
 		old_conc = static_cast<FunctionalMaterial*>(_materials[i])->getPrecConc(PREVIOUS, dg);
-		new_conc = old_conc / (1.0 + _cmfd->getLambda()[dg]*_dt_cmfd) 
-		    + _cmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _cmfd->getLambda()[dg]*_dt_cmfd);
+		new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
+		    + _tcmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
 		
 		log_printf(DEBUG, "cell: %i, old conc: %f, new conc: %f", i, old_conc, new_conc);
 		
@@ -323,19 +325,37 @@ void TransientSolver::setEndTime(double time){
 
 
 void TransientSolver::initializeTimeStepper(){
+    log_printf(NORMAL, "initializing time stepper");
     _ts = new TimeStepper(_start_time, _end_time, _dt_moc, _dt_cmfd);
-    _cmfd->initialize(_ts);
+    _tcmfd->setTimeStepper(_ts);
 }
 
 
 void TransientSolver::initializeTransientMaterials(){
 
-    for (int i = 0; i < _mesh->getNumCells(); i++){
-	if (_materials[i]->getType() == FUNCTIONAL){
-	    static_cast<FunctionalMaterial*>(_materials[i])->setTimeStepper(_ts);
-	    static_cast<FunctionalMaterial*>(_materials[i])->initializeTransientProps(_num_delay_groups);
+    log_printf(NORMAL, "initializing transient materials...");
+
+    if (_solve_method == MOC){
+	for (int i = 0; i < _mesh->getNumFSRs(); i++){
+	    /* clone materials */
+	    if (_mesh->getFSRMaterials()[i]->getType() == BASE){
+		_mesh->getFSRMaterials()[i] = _mesh->getFSRMaterials()[i]->clone();
+	    }
+	    else{
+		_mesh->getFSRMaterials()[i] = static_cast<FunctionalMaterial*>(_mesh->getFSRMaterials()[i])->clone();
+	    }
 	}
-  }
+    }
+    else if (_solve_method == DIFFUSION){
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    if (_materials[i]->getType() == FUNCTIONAL){
+		static_cast<FunctionalMaterial*>(_materials[i])->setTimeStepper(_ts);
+		static_cast<FunctionalMaterial*>(_materials[i])->initializeTransientProps(_num_delay_groups);
+	    }
+	}
+    }
+
+    log_printf(NORMAL, "done initializing transient materials...");
 }
 
 
@@ -346,7 +366,7 @@ void TransientSolver::setDtMOC(double dt){
 
 void TransientSolver::setDtCMFD(double dt){
     _dt_cmfd = dt;
-    _cmfd->setDtCMFD(dt);
+    _tcmfd->setDtCMFD(dt);
 }
 
 
@@ -381,7 +401,7 @@ void TransientSolver::setAlpha(double alpha){
 
 void TransientSolver::setNumDelayGroups(int num_groups){
     _num_delay_groups = num_groups;
-    _cmfd->setNumDelayGroups(num_groups);
+    _tcmfd->setNumDelayGroups(num_groups);
 }
 
 
@@ -393,7 +413,7 @@ void TransientSolver::setTransientMethod(const char* trans_type){
 	log_printf(ERROR, "Could not recognize transient method; "
 		   " the options are ADIABATIC");
     
-    _cmfd->setTransientType(_transient_method);
+    _tcmfd->setTransientType(_transient_method);
 }
 
 
