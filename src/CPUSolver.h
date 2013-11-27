@@ -65,7 +65,7 @@ protected:
     void zeroSurfaceCurrents();
     void flattenFSRSources(FP_PRECISION value);
     void normalizeFluxes();
-    FP_PRECISION computeFSRSources();
+    virtual FP_PRECISION computeFSRSources();
 
     /**
      * @brief Computes the contribution to the flat source region scalar flux
@@ -74,7 +74,8 @@ protected:
      * @param track_flux a pointer to the track's angular flux
      * @param fsr_flux a pointer to the temporary flat source region flux buffer
      */
-    virtual void scalarFluxTally(segment* curr_segment, 
+    virtual void scalarFluxTally(segment* curr_segment,
+				 int azim_index,
 				 FP_PRECISION* track_flux,
 				 FP_PRECISION* fsr_flux,
 				 bool fwd);
@@ -85,8 +86,8 @@ protected:
      * @param direction the track direction (forward - true, reverse - false)
      * @param track_flux a pointer to the track's outgoing angular flux
      */
-    virtual void transferBoundaryFlux(int track_id, bool direction,
-				      FP_PRECISION* track_flux);
+    virtual void transferBoundaryFlux(int track_id, int azim_index, 
+				      bool direction, FP_PRECISION* track_flux);
 
     void addSourceToScalarFlux();
     void computeKeff();

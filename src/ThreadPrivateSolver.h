@@ -46,7 +46,7 @@ protected:
 
     void flattenFSRFluxes(FP_PRECISION value);
     void zeroSurfaceCurrents();
-    void scalarFluxTally(segment* curr_segment, 
+    void scalarFluxTally(segment* curr_segment, int azim_index,
 			 FP_PRECISION* track_flux,
 			 FP_PRECISION* fsr_flux,
 			 bool fwd);

@@ -46,6 +46,7 @@ Material::Material(short int id) {
 
     _fissionable = false;
     _data_aligned = false;
+    _transient = false;
     
     _temperature = new double[6];
     
@@ -428,6 +429,24 @@ void Material::setSigmaT(double* xs, int num_groups) {
 }
 
 
+void Material::computeSigmaT(){
+
+    /* set sigma t to sigma_a */
+    for (int i=0; i < _num_groups; i++)
+	_sigma_t[i] = _sigma_a[i];
+    
+    if (_buckling != NULL && _dif_coef != NULL){
+	for (int i=0; i < _num_groups; i++)
+	    _sigma_t[i] += _buckling[i] * _dif_coef[i];
+    }
+
+    /* add scattering xs */
+    for (int e=0; e < _num_groups; e++){
+	for (int g=0; g < _num_groups; g++)
+	    _sigma_t[e] += _sigma_s[g*_num_groups+e];
+    }
+}
+
 /**
  * @brief Set the material's total cross-section for some energy group.
  * @param xs the total cross-section (\f$ \Sigma_t [cm^1] \f$)
@@ -751,7 +770,7 @@ void Material::setDifHatByGroup(double xs, int group, int surface) {
  * @param xs the diffusion coefficient
  * @param group the energy group
  */
-void Material::setDifTildeByGroup(double xs, int group, int surface) {
+void Material::setDifTildeByGroup(double xs, int group, int surface, materialState state) {
 
     if (group < 0 || group >= _num_groups)
         log_printf(ERROR, "Unable to set diffusion coefficient correction for group %d"
@@ -761,10 +780,13 @@ void Material::setDifTildeByGroup(double xs, int group, int surface) {
     if (_dif_tilde == NULL){
       _dif_tilde = new double[4*_num_groups];
       for (int i=0; i < _num_groups*4; i++)
-        _dif_tilde[i] = 0.0;
+	  _dif_tilde[_num_groups*4+i] = 0.0;
     }
 
-    _dif_tilde[surface*_num_groups + group] = xs;
+    if (_transient)
+	_dif_tilde[int(state)*_num_groups*4 + surface*_num_groups + group] = xs;
+    else
+	_dif_tilde[surface*_num_groups + group] = xs;
 }
 
 
@@ -1009,12 +1031,11 @@ Material* Material::clone(){
   copySigmaA(material_clone);
   copySigmaS(material_clone);
 
-  material_clone->setTemperature(REFERENCE, getTemperature(REFERENCE));
   material_clone->setTemperature(PREVIOUS, getTemperature(PREVIOUS));
   material_clone->setTemperature(PREVIOUS_CONV, getTemperature(PREVIOUS_CONV));
   material_clone->setTemperature(CURRENT, getTemperature(CURRENT));
   material_clone->setTemperature(FORWARD, getTemperature(FORWARD));
-  material_clone->setTemperature(ADJ, getTemperature(ADJ));
+  material_clone->setTemperature(FSR, getTemperature(FSR));
 
   return material_clone;
 
@@ -1064,4 +1085,9 @@ void Material::copyTemperature(materialState state_from, materialState state_to)
 
 materialType Material::getType(){
   return _type;
+}
+
+
+void Material::setTransient(bool transient){
+    _transient = transient;
 }

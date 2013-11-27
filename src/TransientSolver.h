@@ -31,8 +31,8 @@ private:
     Cmfd* _cmfd;
     Solver* _solver;
     TimeStepper* _ts;
-    Material** _materials;
     Mesh* _mesh;
+    Mesh* _geom_mesh;
     Timer* _timer;
     
     double _dt_moc;
@@ -48,8 +48,8 @@ private:
     double _power_factor;
     solveType _solve_method;
     transientType _transient_method;
-    int _num_delay_groups;
-    int _num_groups;
+    int _ndg;
+    int _ng;
     
     double _nu;
     double _kappa;
@@ -70,7 +70,7 @@ public:
     void copyFieldVariables(materialState state_from, materialState state_to);
     double computePower(materialState state=CURRENT);
     void updateTemperatures();
-    double computeResidual();
+    double computeResidual(solveType solve_type);
     void trimVectors(int len_conv);
     void initializePrecursorConc();
     void updatePrecursorConc();
@@ -78,6 +78,7 @@ public:
     void initializeTransientMaterials();
     void solveInitialState();
     void solveOuterStep();
+    void mapPrecConc();
     
     /* setters */
     void setDtMOC(double dt);
@@ -90,7 +91,12 @@ public:
     void setPowerInit(double power);
     void setStartTime(double time);
     void setEndTime(double time);
-    
+    double getPower();
+    double getTime();
+    double getTemp();
+
+
+
 };
 
 #endif /* TRANSIENTSOLVER_H_ */

@@ -100,7 +100,7 @@ void VectorizedPrivateSolver::initializeFluxArrays() {
  * @param track_flux a pointer to the track's angular flux
  * @param fsr_flux a pointer to the temporary flat source region flux buffer
  */
-void VectorizedPrivateSolver::scalarFluxTally(segment* curr_segment,
+void VectorizedPrivateSolver::scalarFluxTally(segment* curr_segment, int azim_index,
 					      FP_PRECISION* track_flux,
 					      FP_PRECISION* fsr_flux){
 
@@ -110,7 +110,7 @@ void VectorizedPrivateSolver::scalarFluxTally(segment* curr_segment,
     double* sigma_t = curr_segment->_material->getSigmaT();
 
     /* The average flux along this segment in the flat source region */
-    FP_PRECISION psibar;
+    FP_PRECISION deltapsi;
     FP_PRECISION* exponentials = &_thread_exponentials[tid*_polar_times_groups];
 
     computeExponentials(curr_segment, exponentials);
@@ -125,10 +125,10 @@ void VectorizedPrivateSolver::scalarFluxTally(segment* curr_segment,
 	    /* Loop over energy groups within this vector */
             #pragma simd vectorlength(VEC_LENGTH) private(psibar)
             for (int e=v*VEC_LENGTH; e < (v+1)*VEC_LENGTH; e++) {
-	        psibar = (track_flux(p,e) - _reduced_source(fsr_id,e)) * 
+	        deltapsi = (track_flux(p,e) - _reduced_source(fsr_id,e)) * 
 		          exponentials(p,e);
-	        fsr_flux[e] += psibar * _polar_weights[p];
-		track_flux(p,e) -= psibar;
+	        fsr_flux[e] += deltapsi * _polar_weights(azim_index, p);
+		track_flux(p,e) -= deltapsi;
 	    }
 	}
     }
@@ -149,6 +149,7 @@ void VectorizedPrivateSolver::transportSweep() {
     int tid;
     int fsr_id;
     Track* curr_track;
+    int azim_index;
     int num_segments;
     segment* curr_segment;    
     segment* segments;
@@ -176,6 +177,7 @@ void VectorizedPrivateSolver::transportSweep() {
 
 	    /* Initialize local pointers to important data structures */	
 	    curr_track = _tracks[track_id];
+	    azim_index = curr_track->getAzimAngleIndex();
 	    num_segments = curr_track->getNumSegments();
 	    segments = curr_track->getSegments();
 	    track_flux = &_boundary_flux(track_id,0,0,0);
@@ -184,12 +186,12 @@ void VectorizedPrivateSolver::transportSweep() {
 	    for (int s=0; s < num_segments; s++) {
 	        curr_segment = &segments[s];
 		fsr_id = curr_segment->_region_id;
-		scalarFluxTally(curr_segment, track_flux, 
+		scalarFluxTally(curr_segment, azim_index, track_flux,
 	                        &_thread_flux(tid,fsr_id,0));
 	    }
 
 	    /* Transfer flux to outgoing track */
-	    transferBoundaryFlux(track_id, true, track_flux);
+	    transferBoundaryFlux(track_id, azim_index, true, track_flux);
 	    
 	    /* Loop over each segment in reverse direction */
 	    track_flux += _polar_times_groups;
@@ -197,12 +199,12 @@ void VectorizedPrivateSolver::transportSweep() {
 	    for (int s=num_segments-1; s > -1; s--) {
 	        curr_segment = &segments[s];
 		fsr_id = curr_segment->_region_id;
-		scalarFluxTally(curr_segment, track_flux, 
+		scalarFluxTally(curr_segment, azim_index, track_flux, 
 	                        &_thread_flux(tid,fsr_id,0));
 	    }
 	    
 	    /* Transfer flux to outgoing track */
-	    transferBoundaryFlux(track_id, false, track_flux);
+	    transferBoundaryFlux(track_id, azim_index, false, track_flux);
 	}
     }
 

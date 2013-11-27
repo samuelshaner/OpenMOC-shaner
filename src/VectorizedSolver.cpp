@@ -536,7 +536,7 @@ void VectorizedSolver::computeKeff() {
  * @param track_flux a pointer to the track's angular flux
  * @param fsr_flux a pointer to the temporary flat source region flux buffer
  */
-void VectorizedSolver::scalarFluxTally(segment* curr_segment,
+void VectorizedSolver::scalarFluxTally(segment* curr_segment, int azim_index,
    	                               FP_PRECISION* track_flux,
 	                               FP_PRECISION* fsr_flux,
 				       bool fwd){
@@ -547,7 +547,7 @@ void VectorizedSolver::scalarFluxTally(segment* curr_segment,
     double* sigma_t = curr_segment->_material->getSigmaT();
 
     /* The average flux along this segment in the flat source region */
-    FP_PRECISION psibar;
+    FP_PRECISION deltapsi;
     FP_PRECISION* exponentials = &_thread_exponentials[tid*_polar_times_groups];
 
     computeExponentials(curr_segment, exponentials);
@@ -565,10 +565,10 @@ void VectorizedSolver::scalarFluxTally(segment* curr_segment,
 	    /* Loop over energy groups within this vector */
             #pragma simd vectorlength(VEC_LENGTH) private(psibar)
             for (int e=v*VEC_LENGTH; e < (v+1)*VEC_LENGTH; e++) {
-	        psibar = (track_flux(p,e) - _reduced_source(fsr_id,e)) * 
+	        deltapsi = (track_flux(p,e) - _reduced_source(fsr_id,e)) * 
 		          exponentials(p,e);
-	        fsr_flux[e] += psibar * _polar_weights[p];
-		track_flux(p,e) -= psibar;
+	        fsr_flux[e] += deltapsibar * _polar_weights(azim_index, p);
+		track_flux(p,e) -= deltapsi;
 	    }
 	}
     }
@@ -669,7 +669,7 @@ void VectorizedSolver::computeExponentials(segment* curr_segment,
  * @param direction the track direction (forward - true, reverse - false)
  * @param track_flux a pointer to the track's outgoing angular flux
  */
-void VectorizedSolver::transferBoundaryFlux(int track_id, 
+void VectorizedSolver::transferBoundaryFlux(int track_id, int azim_index, 
 					    bool direction,
 					    FP_PRECISION* track_flux) {
     int start;
@@ -709,7 +709,7 @@ void VectorizedSolver::transferBoundaryFlux(int track_id,
 	    for (int e=v*VEC_LENGTH; e < (v+1)*VEC_LENGTH; e++) {
 	        track_out_flux(p,e) = track_flux(p,e) * bc;
 		track_leakage(p,e) = track_flux(p,e) * 
-		                     _polar_weights[p] * (!bc);
+		    _polar_weights(azim_index, p) * (!bc);
 	    }
 	}
     }

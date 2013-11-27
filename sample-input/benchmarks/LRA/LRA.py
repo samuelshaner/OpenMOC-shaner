@@ -108,7 +108,7 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd...')
 
 cmfd = Cmfd(geometry)
-cmfd.setOmega(1.75)
+cmfd.setOmega(1.0)
 cmfd.computeKeff()
 
 log.py_printf('NORMAL', 'k_eff = %f', cmfd.getKeff())

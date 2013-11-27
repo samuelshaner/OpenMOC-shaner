@@ -104,6 +104,9 @@ private:
     /** A CMFD mesh */
     Mesh* _mesh;
 
+    /** A Geometry mesh */
+    Mesh* _geom_mesh;
+
     void initializeCellFillPointers();
 
     Cell* findFirstCell(LocalCoords* coords, double angle);
@@ -171,6 +174,7 @@ public:
     void findMeshWidth(Universe* univ, int* width, int depth);
     int findMeshDepth(Universe* univ, int mesh_level);
     Mesh* getMesh();
+    Mesh* getGeomMesh();
 
 };
 

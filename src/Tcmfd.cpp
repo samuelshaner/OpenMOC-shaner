@@ -48,6 +48,7 @@ Tcmfd::Tcmfd(Geometry* geometry, double criteria){
     _b_prime   = new double[_nc];
     _phi_new   = NULL;
     _phi_old   = NULL;
+    _AM       = new double[_nc*(4+_num_groups)];
 
     /* transient parameters */
     _lambda        = NULL;
@@ -73,6 +74,7 @@ Tcmfd::~Tcmfd() {
     delete [] _phi_temp;
     delete [] _snew;
     delete [] _sold;
+    delete [] _AM;
 
 }
 
@@ -91,49 +93,24 @@ void Tcmfd::solveTCMFD(){
     /* initialize variables */
     int iter = 0;
     double norm = 0.0;
-    double conv = 1e-3;
+    double conv = 1e-8;
+    int max_iter = 1000;    
     
-    if (_solve_method == MOC)
-	_mesh->computeXS();
-    
-    _mesh->computeDs();
-    
+    //_mesh->computeDs();
+
     _phi_old = _mesh->getFluxes(PREVIOUS);
     _phi_new = _mesh->getFluxes(CURRENT);
 
     /* construct matrices */
     constructMatrices();
+
+    /* reconstruct _AM */
+    matSubtract(_AM, _A, 1.0, _M, _cells_x, _cells_y, _num_groups);
     
-    /* get initial source and find initial k_eff */
-    matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
+    //checkNeutronBalance2();
 
-    /* perform power iterations to converge the flux */
-    for (iter = 0; iter < 20000; iter++){
-	
-	/* solve A * b = phi_new */
-	vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
-	linearSolve(_A, _phi_new, _b_prime, _phi_temp, conv, _omega, _cells_x, _cells_y, _num_groups);
-	
-	/* computed the new source */
-	matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
-	
-	/* compute the L2 norm of source error */
-	norm = 0.0;
-	for (int i = 0; i < _nc; i++)
-	    norm += pow((_snew[i] - _sold[i])/(_snew[i]+1e-15), 2);
-
-	norm = pow(norm, 0.5);
-	norm = norm / _nc;
-
-	/* copy new source to old */
-	vecCopy(_snew, _sold, _nc);
-	
-	/* check for convergence */
-	if (norm < _conv_criteria)
-	    break;    
-    }
-
-    log_printf(INFO, "CMFD iter: %i", iter);
+    /* solve inverse system */
+    linearSolve(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cells_x, _cells_y, _num_groups, 10000);
 }
 
 
@@ -145,11 +122,10 @@ void Tcmfd::solveTCMFD(){
  * @return petsc error indicator
  */
 void Tcmfd::constructMatrices(){
-
     log_printf(INFO,"Constructing cmfd transient matrices transient...");
     
     /* initialized variables */
-    int row, col;
+    int row;
     double value;
     int cell;
     
@@ -158,8 +134,8 @@ void Tcmfd::constructMatrices(){
     double* widths = _mesh->getLengthsX();
     
     vecZero(_b, _nc);
-    matZero(_M, _num_groups, _nc);
-    matZero(_A, _num_groups*4, _nc);
+    vecZero(_M, _num_groups*_nc);
+    vecZero(_A, (_num_groups+4)*_nc);
 
     /* loop over mesh cells in y direction */
     for (int y = 0; y < _cells_y; y++){
@@ -188,10 +164,8 @@ void Tcmfd::constructMatrices(){
 		_A[row*(_num_groups+4)+e+2] += value;
 		
 		/* flux derivative term */
-		if (!_initial_state){
-		    value = _mesh->getVolumes()[cell] / (_velocity[e] * _dt_cmfd);
-		    _A[row*(_num_groups+4)+e+2] += value;
-		}
+		value = _mesh->getVolumes()[cell] / (_velocity[e] * _dt_cmfd);
+		_A[row*(_num_groups+4)+e+2] += value;
 		
 		/* scattering terms */
 		for (int g = 0; g < _num_groups; g++){
@@ -281,12 +255,7 @@ void Tcmfd::constructMatrices(){
 		/* add fission terms to M */
 		for (int g = 0; g < _num_groups; g++){
 		    
-		    if (_initial_state)
-			value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell]/_k_eff_0;
-		    else
-			value = (1.0 - _beta_sum) * materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] / _k_eff_0;
-		    			
-		    col = cell*_num_groups+g;
+		    value = (1.0 - _beta_sum) * materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] / _k_eff_0;
 		    
 		    _M[row*_num_groups+g] += value; 
 		}
@@ -300,6 +269,7 @@ void Tcmfd::constructMatrices(){
 
 void Tcmfd::setTransientType(transientType trans_type){
   _transient_method = trans_type;
+  _mesh->setTransientType(trans_type);
 }
 
 
@@ -310,6 +280,7 @@ transientType Tcmfd::getTransientType(){
 
 void Tcmfd::setKeff0(double keff_0){
   _k_eff_0 = keff_0;
+  _mesh->setKeff0(keff_0);
 }
 
 
@@ -343,6 +314,8 @@ void Tcmfd::setBeta(double* beta, int num_delay_groups){
     _beta_sum += beta[g];
     log_printf(NORMAL, "g: %i, beta: %f, beta_sum: %f", g, beta[g], _beta_sum);
   }  
+
+    _mesh->setBeta(beta, num_delay_groups);
 }
 
 
@@ -352,6 +325,8 @@ void Tcmfd::setLambda(double* decay_const, int num_delay_groups){
   
   for (int g = 0; g < num_delay_groups; g++)
     _lambda[g] = decay_const[g];  
+
+  _mesh->setLambda(decay_const, num_delay_groups);
 
 }
 
@@ -363,6 +338,7 @@ void Tcmfd::setVelocity(double* velocity, int num_groups){
   for (int g = 0; g < num_groups; g++)
     _velocity[g] = velocity[g];
   
+  _mesh->setVelocity(velocity, num_groups);
 }
 
 
@@ -373,6 +349,7 @@ void Tcmfd::setDtCMFD(double dt){
 
 void Tcmfd::setInitialState(bool state){
     _initial_state = state;
+    _mesh->setInitialState(state);
 }
 
 
@@ -388,4 +365,51 @@ Mesh* Tcmfd::getMesh(){
 
 void Tcmfd::setOmega(double omega){
     _omega = omega;
+}
+
+
+int Tcmfd::getNumDelayGroups(){
+    return _num_delay_groups;
+}
+
+
+void Tcmfd::checkNeutronBalance(){
+
+    log_printf(NORMAL, "keff 0: %.12f", _k_eff_0);
+
+    _mesh->computeDs();
+
+    _phi_new = _mesh->getFluxes(CURRENT);
+    _phi_old = _mesh->getFluxes(CURRENT);
+
+    /* construct matrices */
+    constructMatrices();
+    
+    /* get right hand side */
+    matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
+    vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
+
+    matMultA(_A, _phi_new, _sold, _cells_x, _cells_y, _num_groups);
+
+    double sumleft = vecSum(_sold, _nc);
+    double sumright = vecSum(_b_prime, _nc);
+
+    log_printf(NORMAL, "TCMFD neutron balance: %.12f", sumleft - sumright);
+
+}
+
+
+void Tcmfd::checkNeutronBalance2(){
+
+    log_printf(NORMAL, "keff 0: %.12f", _k_eff_0);
+
+    /* get right hand side */
+    matMultA(_AM, _phi_new, _snew, _cells_x, _cells_y, _num_groups);
+
+    double sumleft = vecSum(_snew, _nc);
+    double sumright = vecSum(_b, _nc);
+
+    for (int i = 0; i < _nc; i++)
+	log_printf(NORMAL, "nb2 left: %.12f, right: %.12f, dif: %.12f", _snew[i], _b[i], fabs(_snew[i] - _b[i]));
+
 }

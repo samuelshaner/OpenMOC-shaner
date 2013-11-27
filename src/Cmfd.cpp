@@ -18,10 +18,10 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
     _timer = new Timer();
 
     /* integer values */
-    _cells_x = _mesh->getCellsX();
-    _cells_y = _mesh->getCellsY();
-    _num_groups = _mesh->getNumGroups();
-    _nc = _num_groups*_cells_x*_cells_y;
+    _cx = _mesh->getCellsX();
+    _cy = _mesh->getCellsY();
+    _ng = _mesh->getNumGroups();
+    _nc = _ng*_cx*_cy;
     
     /* float values */
     _omega = 1.0;
@@ -31,13 +31,18 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
     _solve_method = _mesh->getSolveType();
     
     /* Create Cmfd matrix objects */
-    _M        = new double[_nc*_num_groups];
-    _A        = new double[_nc*(4+_num_groups)];
+    _M        = new double[_nc*_ng];
+    _A        = new double[_nc*(4+_ng)];
     _phi_temp = new double[_nc];  
     _snew     = new double[_nc];  
     _sold     = new double[_nc];
     _phi_old  = NULL;  
     _phi_new  = NULL;  
+    _b        = new double[_nc];  
+    _b_prime  = new double[_nc];  
+
+    _AM       = new double[_nc*(4+_ng)];
+    _y        = new double[_nc];
     
     /* If solving diffusion problem, create arrays for FSR parameters */
     if (_solve_method == DIFFUSION)
@@ -46,7 +51,7 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
 
 
 /**
- * @brief Destructor deletes arrays of A and M row insertion arrays
+ * @Brief Destructor deletes arrays of A and M row insertion arrays
  */
 Cmfd::~Cmfd() {
 
@@ -55,6 +60,10 @@ Cmfd::~Cmfd() {
   delete [] _M;
   delete [] _snew;
   delete [] _sold;
+  delete [] _y;
+  delete [] _AM;
+  delete [] _b;
+  delete [] _b_prime;
 
 }
 
@@ -65,7 +74,7 @@ Cmfd::~Cmfd() {
  */
 double Cmfd::computeKeff(){
 
-    log_printf(NORMAL, "Running CMFD diffusion solver...");
+    log_printf(INFO, "Running CMFD diffusion solver...");
     
     /* if solving diffusion problem, initialize timer */
     if (_solve_method == DIFFUSION)
@@ -74,63 +83,155 @@ double Cmfd::computeKeff(){
     /* initialize variables */
     double sumnew = 0.0;
     double sumold = 0.0;
-    double norm = 0.0;
+    double norm = 1e10;
     double scale_val;
-    double conv = 1e-2;
+    double conv = 1e-8;
+    int iter = 0;
+    int method = 1;
+    double balance;
 
     if (_solve_method == MOC)
 	_mesh->computeXS();
-    
+    else
+	_timer->startTimer();
+
     _mesh->computeDs();
 
-    _phi_old = _mesh->getFluxes(PREVIOUS);
+    _phi_old = _mesh->getFluxes(FSR_OLD);
+    _mesh->copyFlux(FSR_OLD, CURRENT);
     _phi_new = _mesh->getFluxes(CURRENT);
     
     constructMatrices();
-    
-    /* get initial source */
-    matMultM(_M, _phi_old, _sold, _cells_x*_cells_y, _num_groups);
-    sumold = vecSum(_sold, _nc);
-    scale_val = _nc / sumold;
-    vecScale(_sold, scale_val, _nc);
-    
-    sumold = _nc;
-    
-    for (int iter = 0; iter < 20000; iter++){
-	
-	/* solver phi = A^-1 * old_source */
-	linearSolve(_A, _phi_new, _sold, _phi_temp, conv, _omega, _cells_x, _cells_y, _num_groups);
-	
-	/* compute new source */
-	matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
-	sumnew = vecSum(_snew, _nc);
-	
-	/* compute keff */
-	_k_eff = sumnew / sumold;
-	
-	vecScale(_sold, _k_eff, _nc);
-	
-	/* compute l2 norm */
-	norm = 0.0;
-	for (int i = 0; i < _nc; i++)
-	    norm += pow(_snew[i] - _sold[i], 2);
-	
-	norm = pow(norm, 0.5);
-	norm = norm / _nc;
 
-	/* scale the new source and pass to old source */
-	scale_val = _nc / sumnew;
-	vecScale(_snew, scale_val, _nc);
-	vecCopy(_snew, _sold, _nc);
+    if (_mesh->getInitialState() == false){
+
+	/* reconstruct _AM */
+	matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
 	
-	log_printf(INFO, "GS POWER iter: %i, keff: %f, error: %f", iter, _k_eff, norm);
-	
-	if (norm < _conv_criteria)
-	    break;
+	/* solve inverse system */
+	linearSolve(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cx, _cy, _ng, 10000);
     }
+    else{
+	if (method == 1){
+	    
+	    /* get initial source */
+	    matMultM(_M, _phi_old, _snew, _cx*_cy, _ng);
+	    
+	    /* scale the initial source */
+	    sumnew = vecSum(_snew, _nc);
+	    scale_val = _nc / sumnew;
+	    vecScale(_snew, scale_val, _nc);
+	    vecCopy(_phi_old, _phi_new, _nc);		
+	    sumold = _nc;
+	    	    
+	    vecCopy(_snew, _sold, _nc);
+	    
+	    while (norm > _conv_criteria){
+		
+		/* Solver phi = A^-1 * old_source */
+		vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
+		linearSolve(_A, _phi_new, _b_prime, _phi_temp, conv, _omega, _cx, _cy, _ng, 1000);
+		
+		/* compute new source */
+		matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
+		
+		/* compute keff */
+		sumnew = vecSum(_snew, _nc);
+		_k_eff = sumnew / sumold;
+		vecScale(_sold, _k_eff, _nc);
+				
+		/* compute l2 norm */
+		norm = 0.0;
+		for (int i = 0; i < _nc; i++)
+		    if (_snew[i] != 0.0)
+			norm += pow((_snew[i] - _sold[i])/_snew[i], 2);
+	    
+		norm = pow(norm, 0.5);
+		norm = norm / _nc;
+		
+		/* scale the new source and pass to old source */
+		scale_val = _nc / sumnew;
+		vecScale(_snew, scale_val, _nc);
+		
+		vecCopy(_snew, _sold, _nc);
+		
+		iter++;
 
+		log_printf(INFO, "iter: %i, k_eff: %f, error: %f", iter, _k_eff, norm);
+		
+		if (iter == 10000)
+		    break;
+	    }	
+	    
+	    /* converge the flux with 1000 GS iterations */
+	    //vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
+	    //linearSolve(_A, _phi_new, _b_prime, _phi_temp, -1.0, _omega, _cx, _cy, _ng, 1000);
+	    
+	}
+	else{
+	    
+	    int max_iter = 500;
+	    
+	    /* copy old flux to new */
+	    vecCopy(_phi_old, _phi_new, _nc);
+	    
+	    /* compute the initial rayleigh coefficient */
+	    _k_eff = rayleighQuotient(_A, _M, _phi_new, _snew, _phi_temp, _cx, _cy, _ng);
+	    
+	    /* compute the initial old source */
+	    matMultM(_M, _phi_new, _sold, _cx*_cy, _ng);
+	    sumold = vecSum(_sold, _nc);
+	    scale_val = _nc / sumold;
+	    vecScale(_sold, scale_val, _nc);
+	    vecScale(_phi_new, scale_val, _nc);
+	    sumold = _nc;
+	    
+	    vecCopy(_phi_new, _y, _nc);
+	    
+	    log_printf(NORMAL, "initial keff: %f", _k_eff);
+	    
+	    while (norm > _conv_criteria){
+		
+		/* reconstruct _AM */
+		matSubtract(_AM, _A, 1.0/_k_eff, _M, _cx, _cy, _ng);
+		
+		/* solve inverse system */
+		linearSolve(_AM, _y, _snew, _phi_temp, conv, _omega, _cx, _cy, _ng, max_iter);
+		
+		/* compute new _phi_new  */
+		vecCopy(_y, _phi_new, _nc);
+		vecScale(_phi_new, vecMax(_y, _nc), _nc);
+		matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
+		sumnew = vecSum(_snew, _nc);
+		scale_val = _nc / sumnew;
+		vecScale(_snew, scale_val, _nc);
+		vecScale(_phi_new, scale_val, _nc);
+		
+		/* compute new eigenvalue */
+		_k_eff = rayleighQuotient(_A, _M, _phi_new, _snew, _phi_temp, _cx, _cy, _ng);
+		
+		/* compute norm */
+		norm = 0.0;
+		for (int i = 0; i < _nc; i++)
+		    norm += pow(_snew[i] - _sold[i], 2);
+		
+		norm = pow(norm, 0.5);
+		norm = norm / _nc;
+		
+		/* copy new source to old */
+		vecCopy(_snew, _sold, _nc);
+		
+		iter++;
+		
+		log_printf(NORMAL, "iter: %i, _k_eff: %f, norm: %f", iter, _k_eff, norm); 
+	    }
+	}
+    }
+	
+    
     /* rescale the old and new flux */
-    rescaleFlux();
+    if (_mesh->getInitialState() == true && _solve_method == MOC)
+	rescaleFlux();
     
     /* update the MOC flux */
     if (_solve_method == MOC)
@@ -161,11 +262,11 @@ void Cmfd::rescaleFlux(){
 
     double sumnew, sumold, scale_val;
     
-    matMultM(_M, _phi_new, _snew, _cells_x*_cells_y, _num_groups);
+    matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
     sumnew = vecSum(_snew, _nc);
     scale_val = _nc / sumnew;
     vecScale(_phi_new, scale_val, _nc);
-    matMultM(_M, _phi_old, _sold, _cells_x*_cells_y, _num_groups);
+    matMultM(_M, _phi_old, _sold, _cx*_cy, _ng);
     sumold = vecSum(_sold, _nc);
     scale_val = _nc / sumold;
     vecScale(_phi_old, scale_val, _nc);
@@ -189,114 +290,144 @@ void Cmfd::constructMatrices(){
     double* heights = _mesh->getLengthsY();
     double* widths = _mesh->getLengthsX();
     
-    matZero(_M, _num_groups, _nc);
-    matZero(_A, _num_groups+4, _nc);
+    vecZero(_b, _nc);
+    vecZero(_M, _ng*_nc);
+    vecZero(_A, (_ng+4)*_nc);
+    vecZero(_AM, (_ng+4)*_nc);
     
     /* loop over cells */
-    for (int y = 0; y < _cells_y; y++){
-	for (int x = 0; x < _cells_x; x++){
+    for (int y = 0; y < _cy; y++){
+	for (int x = 0; x < _cx; x++){
 	    
-	    cell = y*_cells_x + x;
+	    cell = y*_cx + x;
 	    
 	    /* loop over groups */
-	    for (int e = 0; e < _num_groups; e++){
+	    for (int e = 0; e < _ng; e++){
 		
-		row = cell*_num_groups + e;
-		
+		row = cell*_ng + e;
+
+		/* old flux and delayed neutron precursors */
+		if (_mesh->getInitialState() == false){
+		    _b[row] = _mesh->getFluxes(PREVIOUS_CONV)[cell*_ng + e] /
+			(_mesh->getVelocity()[e] * _mesh->getDtMOC()) * _mesh->getVolumes()[cell];
+		    //log_printf(NORMAL, "method c: %i, g: %i, dt: %f", cell, e, _mesh->getDtMOC()); 
+		    
+		    if (materials[cell]->getType() == FUNCTIONAL){
+			for (int dg = 0; dg < _mesh->getNumDelayGroups(); dg++){
+			    _b[row] += materials[cell]->getChi()[e] * _mesh->getVolumes()[cell] * 
+				_mesh->getLambda()[dg] * static_cast<FunctionalMaterial*>(materials[cell])->getPrecConc(CURRENT, dg);
+			    //log_printf(NORMAL, "delay c: %i, g: %i, dg: %i, value: %f", cell, e, dg, materials[cell]->getChi()[e] * _mesh->getVolumes()[cell] * 
+			    //	_mesh->getLambda()[dg] * static_cast<FunctionalMaterial*>(materials[cell])->getPrecConc(CURRENT, dg)); 
+			}
+		    }	
+		}	
+				
 		/* absorption term */
 		value = materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
-		_A[row*(_num_groups+4)+e+2] += value;
-		
-		/* out (1st) and in (2nd) scattering */
-		for (int g = 0; g < _num_groups; g++){
-		    if (e != g){
-			value = materials[cell]->getSigmaS()[g*_num_groups+e] * _mesh->getVolumes()[cell]; 
-			_A[row*(_num_groups+4)+e+2] += value;
-			value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];
-			_A[row*(_num_groups+4)+g+2] += value;
-		    }
+		_A[row*(_ng+4)+e+2] += value;
+
+		/* flux derivative term */
+		if (_mesh->getInitialState() == false){
+		    value = _mesh->getVolumes()[cell] / (_mesh->getVelocity()[e] * _mesh->getDtMOC());
+		    _A[row*(_ng+4)+e+2] += value;
 		}
 		
-		
+		/* out (1st) and in (2nd) scattering */
+		for (int g = 0; g < _ng; g++){
+		    if (e != g){
+			value = materials[cell]->getSigmaS()[g*_ng+e] * _mesh->getVolumes()[cell]; 
+			_A[row*(_ng+4)+e+2] += value;
+			value = - materials[cell]->getSigmaS()[e*_ng + g] * _mesh->getVolumes()[cell];
+			_A[row*(_ng+4)+g+2] += value;
+		    }
+		}
+				
 		/* RIGHT SURFACE */
 		
 		/* set transport term on diagonal */
 		
-		value = (materials[cell]->getDifHat()[2*_num_groups + e] 
-			 - materials[cell]->getDifTilde()[2*_num_groups + e]) 
-		    * heights[cell / _cells_x];
+		value = (materials[cell]->getDifHat()[2*_ng + e] 
+			 - materials[cell]->getDifTilde()[2*_ng + e]) 
+		    * heights[cell / _cx];
 		
-		_A[row*(_num_groups+4)+e+2] += value; 
+		_A[row*(_ng+4)+e+2] += value; 
 		
 		
 		/* set transport term on off diagonal */
-		if (x != _cells_x - 1){
-		    value = - (materials[cell]->getDifHat()[2*_num_groups + e] 
-			       + materials[cell]->getDifTilde()[2*_num_groups + e]) 
-			* heights[cell / _cells_x];
+		if (x != _cx - 1){
+		    value = - (materials[cell]->getDifHat()[2*_ng + e] 
+			       + materials[cell]->getDifTilde()[2*_ng + e]) 
+			* heights[cell / _cx];
 		    
-		    _A[row*(_num_groups+4)+_num_groups+2] += value; 
+		    _A[row*(_ng+4)+_ng+2] += value; 
 		}
 		
 		/* LEFT SURFACE */
 		
 		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[0*_num_groups + e] 
-			 + materials[cell]->getDifTilde()[0*_num_groups + e]) 
-		    * heights[cell / _cells_x];
+		value = (materials[cell]->getDifHat()[0*_ng + e] 
+			 + materials[cell]->getDifTilde()[0*_ng + e]) 
+		    * heights[cell / _cx];
 		
-		_A[row*(_num_groups+4)+e+2] += value; 
+		_A[row*(_ng+4)+e+2] += value; 
 		
 		/* set transport term on off diagonal */
 		if (x != 0){
-		    value = - (materials[cell]->getDifHat()[0*_num_groups + e] 
-			       - materials[cell]->getDifTilde()[0*_num_groups + e]) 
-			* heights[cell / _cells_x];
+		    value = - (materials[cell]->getDifHat()[0*_ng + e] 
+			       - materials[cell]->getDifTilde()[0*_ng + e]) 
+			* heights[cell / _cx];
 		    
-		    _A[row*(_num_groups+4)] += value; 
+		    _A[row*(_ng+4)] += value; 
 		}
 		
 		/* BOTTOM SURFACE */
 		
 		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[1*_num_groups + e] 
-			 - materials[cell]->getDifTilde()[1*_num_groups + e]) 
-		    * widths[cell % _cells_x];
+		value = (materials[cell]->getDifHat()[1*_ng + e] 
+			 - materials[cell]->getDifTilde()[1*_ng + e]) 
+		    * widths[cell % _cx];
 		
-		_A[row*(_num_groups+4)+e+2] += value;        
+		_A[row*(_ng+4)+e+2] += value;        
 		
 		/* set transport term on off diagonal */
-		if (y != _cells_y - 1){
-		    value = - (materials[cell]->getDifHat()[1*_num_groups + e] 
-			       + materials[cell]->getDifTilde()[1*_num_groups + e]) 
-			* widths[cell % _cells_x];
+		if (y != _cy - 1){
+		    value = - (materials[cell]->getDifHat()[1*_ng + e] 
+			       + materials[cell]->getDifTilde()[1*_ng + e]) 
+			* widths[cell % _cx];
 		    
-		    _A[row*(_num_groups+4)+1] += value; 
+		    _A[row*(_ng+4)+1] += value; 
 		}
 		
 		/* TOP SURFACE */
 		
 		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[3*_num_groups + e] 
-			 + materials[cell]->getDifTilde()[3*_num_groups + e]) 
-		    * widths[cell % _cells_x];
+		value = (materials[cell]->getDifHat()[3*_ng + e] 
+			 + materials[cell]->getDifTilde()[3*_ng + e]) 
+		    * widths[cell % _cx];
 		
-		_A[row*(_num_groups+4)+e+2] += value; 
+		_A[row*(_ng+4)+e+2] += value; 
 		
 		/* set transport term on off diagonal */
 		if (y != 0){
-		    value = - (materials[cell]->getDifHat()[3*_num_groups + e] 
-			       - materials[cell]->getDifTilde()[3*_num_groups + e]) 
-			* widths[cell % _cells_x];
+		    value = - (materials[cell]->getDifHat()[3*_ng + e] 
+			       - materials[cell]->getDifTilde()[3*_ng + e]) 
+			* widths[cell % _cx];
 		    
-		    _A[row*(_num_groups+4)+_num_groups+3] += value; 
+		    _A[row*(_ng+4)+_ng+3] += value; 
 		}
 		
-		/* source term */
-		for (int g = 0; g < _num_groups; g++){	    
-		    value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell];	    
+		/* fission source */
+		for (int g = 0; g < _ng; g++){	    
+		    if (_mesh->getInitialState() == true){
+			value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] *  _mesh->getVolumes()[cell];	   
+		    }
+		    else{
+			value = (1.0 - _mesh->getBetaSum()) / _mesh->getKeff0() * 
+			    materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * 
+			    _mesh->getVolumes()[cell];	    
+		    }
 		    
-		    _M[row*_num_groups+g] += value; 
+		    _M[row*_ng+g] += value; 
 		}
 	    }
 	}
@@ -344,4 +475,31 @@ Mesh* Cmfd::getMesh(){
 
 void Cmfd::setOmega(double omega){
   _omega = omega;
+}
+
+
+void Cmfd::checkNeutronBalance(){
+
+    if (_solve_method == MOC)
+	_mesh->computeXS();
+
+    _mesh->computeDs();
+
+    _phi_new = _mesh->getFluxes(CURRENT);
+
+    /* construct matrices */
+    constructMatrices();
+    
+    /* get right hand side */
+    matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
+    vecScale(_snew, 1.0/_k_eff, _nc);
+
+    matMultA(_A, _phi_new, _sold, _cx, _cy, _ng);
+
+    double sumleft = vecSum(_sold, _nc);
+    double sumright = vecSum(_snew, _nc);
+
+    for (int i = 0; i < _nc; i++)
+	log_printf(NORMAL, "cnb dif: %.12f", fabs(_sold[i] - _snew[i]));
+
 }

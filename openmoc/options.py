@@ -45,7 +45,7 @@ class options:
 
         try:
             opts, args = getopt.getopt(sys.argv[1:], 
-                                       'ha:s:i:c:t:b:g:r:f:l:',
+                                       'h:a:s:i:c:t:b:g:r:f:l:',
                                        ['help',
                                         'num-azim=',
                                         'track-spacing=',

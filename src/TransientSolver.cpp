@@ -8,22 +8,32 @@
  */
 TransientSolver::TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd, Solver* solver){
 
-  log_printf(NORMAL, "Creating transient object...");
-  
-  _tcmfd = tcmfd;
-  _cmfd = cmfd;
-  _geom = geom;
-  _solver = solver;
-  _mesh = _tcmfd->getMesh();
-  _materials = _mesh->getMaterials();
-  _solve_method = _mesh->getSolveType();
-  _num_groups = _geom->getNumEnergyGroups();
-  _timer = new Timer();
- 
-  /* compute the volume of the core */
-  computeVolCore();
+    log_printf(NORMAL, "Creating transient object...");
+    
+    _tcmfd = tcmfd;
+    _cmfd = cmfd;
+    _geom = geom;
+    _solver = solver;
+    _mesh = _geom->getMesh();
+    _geom_mesh = _geom->getGeomMesh();
+    _solve_method = _mesh->getSolveType();
+    _ng = _geom->getNumEnergyGroups();
+    _timer = new Timer();
+    
+    /* compute the volume of the core */
+    computeVolCore();
 
-  _mesh->createNewFlux(REFERENCE);
+    _mesh->createNewFlux(PREVIOUS);
+    _mesh->createNewFlux(PREVIOUS_CONV);    
+    _mesh->createNewFlux(FORWARD);
+    
+    /* create new flux arrays */
+    if (_solve_method == MOC){
+	_geom_mesh->createNewFlux(FORWARD);
+	_geom_mesh->createNewFlux(CURRENT);
+	_geom_mesh->createNewFlux(PREVIOUS_CONV);
+	_geom_mesh->createNewFlux(PREVIOUS);
+    }
 }
 
 /**
@@ -42,32 +52,52 @@ void TransientSolver::solveInitialState(){
     initializeTransientMaterials();
     
     /* compute initial shape function */
-    if (_solve_method == DIFFUSION)
+    log_printf(NORMAL, "Computing initial shape");
+    if (_solve_method == DIFFUSION){
 	_k_eff_0 = _cmfd->computeKeff();
-    else
+	_mesh->copyFlux(CURRENT, PREVIOUS);
+    }
+    else{
+	/* MOC solve */
 	_k_eff_0 = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);    
-    
+
+	/* compute coarse mesh flux and copy to CURRENT, PREVIOUS, and PREVIOUS_CONV */
+	_mesh->computeXS();
+	_mesh->copyFlux(FSR_OLD, CURRENT);
+	_mesh->copyFlux(FSR_OLD, PREVIOUS);
+	_mesh->copyFlux(FSR_OLD, PREVIOUS_CONV);
+	_mesh->copyDs(FORWARD, CURRENT);
+	_mesh->copyDs(FORWARD, PREVOIUS_CONV);
+
+	/* convert FSR flux to shape function */
+	_mesh->computeFineShape(_geom_mesh->getFluxes(CURRENT), _mesh->getFluxes(CURRENT));
+
+	/* copy fine mesh shape to FORWARD and PREVIOUS_CONV */
+	_geom_mesh->copyFlux(CURRENT, PREVIOUS);
+	_geom_mesh->copyFlux(CURRENT, PREVIOUS_CONV);
+
+    } 
+
     /* set the initial eigenvalue in the cmfd solver */
     log_printf(NORMAL, "k_eff_0: %f", _k_eff_0);
     _tcmfd->setKeff0(_k_eff_0);
 
-    _mesh->copyFlux(CURRENT, PREVIOUS);
-
     /* compute the power normalization factor */
     _power_factor = _power_init / computePower();
-    vecScale(_mesh->getFluxes(PREVIOUS), _power_factor, _num_groups*_mesh->getNumCells());
-    vecScale(_mesh->getFluxes(CURRENT), _power_factor, _num_groups*_mesh->getNumCells());
-        
+
     /* initialize the precursor concentration and PKE matrices */
     initializePrecursorConc();
-    copyPrecConc(CURRENT, PREVIOUS);
-        
+
+    if (_solve_method == MOC)
+	mapPrecConc();
+
+    /* set initial state flag to false */
     _tcmfd->setInitialState(false);
     
     /* save initial global parameters */
     _time.push_back(0.0);
     _temp.push_back(computeCoreTemp());
-    _power.push_back(computePower());
+    _power.push_back(computePower() * _power_factor);
     log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f", _time.back(), _power.back(), _temp.back());  
 }
 
@@ -75,37 +105,127 @@ void TransientSolver::solveInitialState(){
 void TransientSolver::solveOuterStep(){
   
     /* set time integration parameters */
-    double tolerance_out = 1.e-6;
+    double tolerance = 1.e-6;
     int length_conv = _power.size();
     double residual_out = 1.0;
+    double residual_in = 1.0;
     int iter = 0;
-    
+    double k_eff;
+
     if (_ts->getTime(CURRENT) == _start_time)
 	_timer->startTimer();
     
-    /* compute the flux at the forward time step */
-    _ts->takeStep();
-    syncMaterials(CURRENT);
-    updatePrecursorConc();    
+    if (_solve_method == MOC){
+	
+	/* reset outer loop residual */
+	residual_out = 1.0;
+	int len_conv = _power.size();
 
-    while (residual_out > tolerance_out){
-	_mesh->copyFlux(CURRENT, REFERENCE);
-	_tcmfd->solveTCMFD();
-	updateTemperatures();
-	updatePrecursorConc();
-	syncMaterials(CURRENT);	
-	residual_out = computeResidual();
-	iter++;
+	/* converge the source on the outer time step fine mesh */
+	while (residual_out > tolerance){
+
+	    /* set FORWARD flux to test for convergence */
+	    _geom_mesh->copyFlux(CURRENT, FORWARD);
+
+	    /* trim power, temp, and time to account due to implicit solve */
+	    trimVectors(len_conv);
+	    
+	    /* reset CURRENT time */
+	    _ts->setTime(CURRENT , _ts->getTime(PREVIOUS_CONV));
+	    _ts->setTime(PREVIOUS , _ts->getTime(PREVIOUS_CONV));
+
+	    /* reset precursor concentrations to PREVIOUS_CONV */
+	    copyFieldVariables(PREVIOUS_CONV, CURRENT);
+	    copyFieldVariables(PREVIOUS_CONV, PREVIOUS);
+	    _mesh->copyFlux(PREVIOUS_CONV, CURRENT);
+	    _mesh->copyFlux(PREVIOUS_CONV, PREVIOUS);
+
+	    /* inner loop over TCMFD solves */
+	    while (_ts->getTime(CURRENT) < _ts->getTime(PREVIOUS_CONV) + _ts->getDtMOC() - 1e-8){
+		
+		/* reset iterator and residual */
+		iter = 0;
+		residual_in = 1.0;
+		
+		/* increment time */
+		_ts->takeStep();
+		
+		/* insertion of reactivity */
+		syncMaterials(CURRENT);
+
+		/* interpolate fine mesh shape and Ds */
+
+		/* homogenize xs and update precursor concentration */
+		updatePrecursorConc();
+
+		/* take outer step */
+		while (residual_in > tolerance){
+		    _mesh->copyFlux(CURRENT, FORWARD);
+		    _tcmfd->solveTCMFD();
+		    updateTemperatures();
+		    updatePrecursorConc();
+		    syncMaterials(CURRENT);
+		    residual_in = computeResidual(DIFFUSION);
+		    iter++;
+		}	
+		
+		/* copy the coarse mesh flux from CURRENT to PREVIOUS */
+		_mesh->copyFlux(CURRENT, PREVIOUS);
+		copyFieldVariables(CURRENT, PREVIOUS);
+		
+		/* compute and save the power, temp, and time */
+		_time.push_back(_ts->getTime(CURRENT));
+		_temp.push_back(computeCoreTemp());
+		_power.push_back(computePower() * _power_factor);
+		log_printf(NORMAL, "TIME: %f, POWER: %.12f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  		
+	    }
+
+	    /* compute new shape function and check for outer loop convergence */
+	    k_eff = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);
+	    _mesh->copyFlux(PREVIOUS, CURRENT);
+	    _mesh->computeFineShape(_geom_mesh->getFluxes(CURRENT), _mesh->getFluxes(CURRENT));
+	    residual_out = computeResidual(MOC);
+	    //log_printf(NORMAL, "Fine mesh flux tolerace: %.10f, residual: %.10f", tolerance, residual_out); 
+	}
+
+	/* copy converged field variables */
+	copyFieldVariables(CURRENT, PREVIOUS_CONV);
+	_mesh->copyFlux(CURRENT, PREVIOUS_CONV);
+	
+	/* set PREVIOUS_CONV time */
+	_ts->convergedMOCStep();
     }
-        
-    /* compute and save the power, temp, and time */
-    _time.push_back(_ts->getTime(CURRENT));
-    _temp.push_back(computeCoreTemp());
-    _power.push_back(computePower());
-    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  
-        
-    copyFieldVariables(CURRENT, PREVIOUS);
+    else{
+	while (_ts->getTime(CURRENT) < _ts->getTime(PREVIOUS_CONV) + _ts->getDtMOC() - 1e-8){
+	    iter = 0;
+	    _ts->takeStep();
+	    syncMaterials(CURRENT);
+	    updatePrecursorConc();
+	    residual_in = 1.0;
 
+	    /* take outer step */
+	    while (residual_in > tolerance){
+		_mesh->copyFlux(CURRENT, FORWARD);
+		_tcmfd->solveTCMFD();
+		updateTemperatures();
+		updatePrecursorConc();
+		syncMaterials(CURRENT);
+		residual_in = computeResidual(DIFFUSION);
+		iter++;
+	    }
+	  
+	    copyFieldVariables(CURRENT, PREVIOUS);
+  
+	    /* compute and save the power, temp, and time */
+	    _time.push_back(_ts->getTime(CURRENT));
+	    _temp.push_back(computeCoreTemp());
+	    _power.push_back(computePower() * _power_factor);
+	    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  	    
+	}
+	
+	_ts->convergedMOCStep();
+    }
+    
     if (fabs(_ts->getTime(CURRENT) - _end_time) < 1e-8){
 	std::string msg_string;
 	log_printf(TITLE, "TIMING REPORT");
@@ -120,38 +240,108 @@ void TransientSolver::solveOuterStep(){
 }
 
 
-double TransientSolver::computeResidual(){
+double TransientSolver::computeResidual(solveType solve_type){
     
     double res = 0.0;
+    double source = 0.0;
     
-    double* new_flux = _mesh->getFluxes(CURRENT);
-    double* fwd_flux = _mesh->getFluxes(REFERENCE);
+    if (solve_type == MOC){
+	std::vector<int>::iterator iter;
+	double* new_shape = _geom_mesh->getFluxes(CURRENT);
+	double* old_shape = _geom_mesh->getFluxes(FORWARD);
+	double* coarse_flux = _mesh->getFluxes(CURRENT);
+	double* coarse_volumes = _mesh->getVolumes();
+	double* fine_volumes = _geom_mesh->getVolumes();
+	double* velocity = _mesh->getVelocity();
+	Material** materials = _geom_mesh->getMaterials();
+	
+	/* compute new source */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
+		for (int e = 0; e < _ng; e++){
+		    if (materials[*iter]->isFissionable())
+			source += materials[*iter]->getNuSigmaF()[e] * new_shape[*iter*_ng+e]
+			    * coarse_flux[i*_ng+e] * coarse_volumes[i] / velocity[e] * fine_volumes[*iter];
+		}
+	    }
+	}
+
+	source = source / _vol_core;
+
+	/* loop over coarse mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    
+	    /* loop over fsrs within cell */
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
+		
+		for (int e = 0; e < _ng; e++){
+		    if (materials[*iter]->isFissionable())
+			res += pow((materials[*iter]->getNuSigmaF()[e] * 
+				    (new_shape[*iter*_ng+e] - old_shape[*iter*_ng+e])
+				    * coarse_flux[i*_ng+e] * coarse_volumes[i] / velocity[e] * fine_volumes[*iter])
+				   / source, 2.0);
+		}
+	    }
+	}
     
-    for (int i = 0; i < _mesh->getNumCells(); i++){
-	for (int e = 0; e < _num_groups; e++)
-	    res += pow(_materials[i]->getNuSigmaF()[e] * (fwd_flux[e] - new_flux[e]) * _mesh->getVolumes()[i]/ (_materials[i]->getNuSigmaF()[e] * fwd_flux[e] * _mesh->getVolumes()[i] + 1e-10), 2.0);
+	res = pow(res, 0.5);
+	res = res / (_geom_mesh->getNumCells() * _ng);
+	
     }
-    
-    res = pow(res, 0.5);
-    res = res / (_mesh->getNumCells() * _num_groups);
-    
+    else{
+	double* new_flux = _mesh->getFluxes(CURRENT);
+	double* old_flux = _mesh->getFluxes(FORWARD);
+	Material** materials = _mesh->getMaterials();
+	double* volumes = _mesh->getVolumes();
+
+	/* compute new source */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    for (int e = 0; e < _ng; e++){
+		if (materials[i]->isFissionable())
+		    source += materials[i]->getNuSigmaF()[e] * new_flux[i*_ng+e] * volumes[i];
+	    }
+	}
+
+	source = source / _vol_core;	
+	
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    for (int e = 0; e < _ng; e++){
+		if (materials[i]->isFissionable())
+		    res += pow((materials[i]->getNuSigmaF()[e] * 
+				(new_flux[i*_ng+e] - old_flux[i*_ng+e]) * volumes[i]) 
+			       / source, 2.0);
+	    }
+	}
+	
+	res = pow(res, 0.5);
+	res = res / (_mesh->getNumCells() * _ng);
+    }
+        
     return res;
 }
 
 void TransientSolver::copyFieldVariables(materialState state_from, materialState state_to){
 
     copyTemperature(state_from, state_to);
-    _mesh->copyFlux(state_from, state_to);
     copyPrecConc(state_from, state_to);
     
+    if (_solve_method == MOC)
+	_geom_mesh->copyFlux(state_from, state_to);
+    else
+	_mesh->copyFlux(state_from, state_to);
 }
 
 
 void TransientSolver::copyTemperature(materialState state_from, materialState state_to){
-    
-    /* loop over mesh cells */
-    for (int i = 0; i < _mesh->getNumCells(); i++)
-	_materials[i]->copyTemperature(state_from, state_to); 
+
+    if (_solve_method == MOC){
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++)
+	    _geom_mesh->getMaterials()[i]->copyTemperature(state_from, state_to); 
+    }
+    else{
+	for (int i = 0; i < _mesh->getNumCells(); i++)
+	    _mesh->getMaterials()[i]->copyTemperature(state_from, state_to); 	
+    }    
 }
 
 
@@ -173,21 +363,53 @@ void TransientSolver::updateTemperatures(){
     
     /* initialize variables */
     double power, temp;
-    double* flux = _mesh->getFluxes(CURRENT);
-    
-    /* loop over fsrs */
-    for (int i = 0; i < _mesh->getNumCells(); i++){
+
+    if (_solve_method == MOC){
+	std::vector<int>::iterator iter;
+	double* fine_shape = _geom_mesh->getFluxes(CURRENT);
+	double* coarse_flux = _mesh->getFluxes(CURRENT);
+	double* volumes = _mesh->getVolumes();
+	double* velocity = _mesh->getVelocity();
+	Material** materials = _geom_mesh->getMaterials();
 	
-	power = 0.0;
-	
-	/* compute power in fsr */
-	for (int e = 0; e < _num_groups; e++){
-	    power += _alpha / _nu * _materials[i]->getNuSigmaF()[e] * flux[i*_num_groups + e];
-	}
+	/* loop over coarse mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    
+	    /* loop over fsrs within cell */
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
+
+		power = 0.0;
 		
-	power = power;
-	temp = _materials[i]->getTemperature(PREVIOUS) + _dt_cmfd * power;
-	_materials[i]->setTemperature(CURRENT, temp);
+		/* compute power in fsr */
+		for (int e = 0; e < _ng; e++){
+		    power += _alpha / _nu * materials[*iter]->getNuSigmaF()[e] 
+			* fine_shape[*iter*_ng+e] * coarse_flux[i*_ng+e] * volumes[i] / velocity[e];
+		}
+		
+		power = power * _power_factor;
+		temp = materials[i]->getTemperature(PREVIOUS) + _dt_cmfd * power;
+		materials[i]->setTemperature(CURRENT, temp);		
+	    }
+	}
+    }
+    else{
+	double* flux = _mesh->getFluxes(CURRENT);
+	Material** materials = _mesh->getMaterials();
+	
+	/* loop over coarse mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    
+	    power = 0.0;
+	    
+	    /* compute power in fsr */
+	    for (int e = 0; e < _ng; e++){
+		power += _alpha / _nu * materials[i]->getNuSigmaF()[e] * flux[i*_ng+e];
+	    }
+	    
+	    power = power * _power_factor;
+	    temp = materials[i]->getTemperature(PREVIOUS) + _dt_cmfd * power;
+	    materials[i]->setTemperature(CURRENT, temp);		
+	}	
     }
 }
 
@@ -199,14 +421,22 @@ double TransientSolver::computeCoreTemp(){
     log_printf(INFO, "Computing core temperature...");
     
     double geom_temp = 0.0;
-    
-    /* loop over mesh cells */
-    for (int i = 0; i < _mesh->getNumCells(); i++){    
-	if (_materials[i]->isFissionable()){
-	    geom_temp += _materials[i]->getTemperature(CURRENT) * _mesh->getVolumes()[i];
+
+    if (_solve_method == MOC){
+	/* loop over mesh cells */
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++){    
+	    if (_geom_mesh->getMaterials()[i]->isFissionable())
+		geom_temp += _geom_mesh->getMaterials()[i]->getTemperature(CURRENT) * _geom_mesh->getVolumes()[i];
 	}
     }
-    
+    else{
+	/* loop over mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){    
+	    if (_mesh->getMaterials()[i]->isFissionable())
+		geom_temp += _mesh->getMaterials()[i]->getTemperature(CURRENT) * _mesh->getVolumes()[i];
+	}
+    }
+        
     geom_temp = geom_temp / _vol_core;
     
     return geom_temp;
@@ -214,13 +444,23 @@ double TransientSolver::computeCoreTemp(){
 
 
 void TransientSolver::copyPrecConc(materialState state_from, materialState state_to){
-    
-    /* loop over mesh cells */
-    for (int i = 0; i < _mesh->getNumCells(); i++){    
-	if (_materials[i]->getType() == FUNCTIONAL){
-	    static_cast<FunctionalMaterial*>(_materials[i])->copyPrecConc(state_from, state_to);
-	}
-    } 
+
+    if (_solve_method == MOC){
+	/* loop over mesh cells */
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++){    
+	    if (_geom_mesh->getMaterials()[i]->getType() == FUNCTIONAL){
+		static_cast<FunctionalMaterial*>(_geom_mesh->getMaterials()[i])->copyPrecConc(state_from, state_to);
+	    }
+	} 	
+    }
+    else{
+	/* loop over mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){    
+	    if (_mesh->getMaterials()[i]->getType() == FUNCTIONAL){
+		static_cast<FunctionalMaterial*>(_mesh->getMaterials()[i])->copyPrecConc(state_from, state_to);
+	    }
+	} 	
+    }
 }
 
 
@@ -230,31 +470,57 @@ void TransientSolver::initializePrecursorConc(){
   
     log_printf(INFO, "Initializing precursors...");
     
-    double power = 0.0;
-    
-    double* flux = _mesh->getFluxes(CURRENT);
-    
-    for (int i = 0; i < _mesh->getNumCells(); i++){
+    double power = 0.0;    
+
+    if (_solve_method == MOC){
 	
-	for (int dg = 0; dg < _num_delay_groups; dg++){
-	    power = 0.0;
+	FP_PRECISION* flux = _geom_mesh->getFSRFluxes();
+	Material** materials = _geom_mesh->getMaterials();
+
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++){
 	    
-	    for (int e = 0; e < _num_groups; e++){
-		power += _materials[i]->getNuSigmaF()[e] * flux[i*_num_groups + e] / _k_eff_0;
-	    }
-	    
-	    if (power > 0.0){
-		static_cast<FunctionalMaterial*>(_materials[i])->setPrecConc(REFERENCE, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power, dg);
+	    for (int dg = 0; dg < _ndg; dg++){
+		power = 0.0;
 		
-		log_printf(DEBUG, "cell: %i, dg: %i, initial prec: %f", i, dg, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power);
+		for (int e = 0; e < _ng; e++){
+		    power += materials[i]->getNuSigmaF()[e] * flux[i*_ng + e] / _k_eff_0;
+		}
+		
+		if (power > 0.0){
+		    static_cast<FunctionalMaterial*>(materials[i])->setPrecConc(CURRENT, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power, dg);
+		    
+		    log_printf(DEBUG, "cell: %i, dg: %i, initial prec: %f", i, dg, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power);
+		}
 	    }
 	}
+	
+	copyPrecConc(CURRENT, PREVIOUS_CONV);
+	copyPrecConc(CURRENT, PREVIOUS);
     }
+    else{
+	double* flux = _mesh->getFluxes(CURRENT);
+	Material** materials = _mesh->getMaterials();
 
-    copyPrecConc(REFERENCE, PREVIOUS);
-    copyPrecConc(REFERENCE, PREVIOUS_CONV);
-    copyPrecConc(REFERENCE, CURRENT);
-    copyPrecConc(REFERENCE, FORWARD);
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    
+	    for (int dg = 0; dg < _ndg; dg++){
+		power = 0.0;
+		
+		for (int e = 0; e < _ng; e++){
+		    power += materials[i]->getNuSigmaF()[e] * flux[i*_ng + e] / _k_eff_0;
+		}
+		
+		if (power > 0.0){
+		    static_cast<FunctionalMaterial*>(materials[i])->setPrecConc(CURRENT, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power, dg);
+		    
+		    log_printf(DEBUG, "cell: %i, dg: %i, initial prec: %f", i, dg, _tcmfd->getBeta()[dg] / _tcmfd->getLambda()[dg] * power);
+		}
+	    }
+	}
+	
+	copyPrecConc(CURRENT, PREVIOUS);
+	copyPrecConc(CURRENT, PREVIOUS_CONV);
+    }    
 }
 
 
@@ -263,50 +529,148 @@ void TransientSolver::updatePrecursorConc(){
     log_printf(INFO, "Updating precursor concentrations...");
     
     /* initialize variables */
-    double power, old_conc, new_conc;
-
-    double* flux = _mesh->getFluxes(CURRENT);
-
-    /* loop over fsrs */
-    for (int i = 0; i < _mesh->getNumCells(); i++){
+    double power, old_conc, new_conc;   
+    
+    if (_solve_method == MOC){
+	std::vector<int>::iterator iter;
+	double* fine_shape = _geom_mesh->getFluxes(CURRENT);
+	double* coarse_flux = _mesh->getFluxes(CURRENT);
+	double* volumes = _mesh->getVolumes();
+	double* velocity = _mesh->getVelocity();
+	Material** materials = _geom_mesh->getMaterials();
 	
-	for (int dg = 0; dg < _num_delay_groups; dg++){
-	    
-	    power = 0.0;
-	    
-	    /* compute power in fsr */
-	    for (int e = 0; e < _num_groups; e++)
-		power += _materials[i]->getNuSigmaF()[e]*flux[i*_num_groups+e] / _k_eff_0;	    
-	    
-	    if (_materials[i]->isFissionable()){
-		old_conc = static_cast<FunctionalMaterial*>(_materials[i])->getPrecConc(PREVIOUS, dg);
-		new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
-		    + _tcmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
+	/* loop over coarse mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+
+	    /* loop over fsrs within cell */
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
 		
-		log_printf(DEBUG, "cell: %i, old conc: %f, new conc: %f", i, old_conc, new_conc);
-		
-		static_cast<FunctionalMaterial*>(_materials[i])->setPrecConc(CURRENT, new_conc, dg);
+		/* loop over delayed groups */
+		for (int dg = 0; dg < _ndg; dg++){
+		    
+		    power = 0.0;
+		    
+		    /* compute power in fsr */
+		    for (int e = 0; e < _ng; e++)
+			power += materials[*iter]->getNuSigmaF()[e] * fine_shape[*iter*_ng+e] 
+			    * coarse_flux[i*_ng+e] * volumes[i] / velocity[e] / _k_eff_0;
+		    
+		    if (materials[*iter]->isFissionable()){
+			old_conc = static_cast<FunctionalMaterial*>(materials[*iter])->getPrecConc(PREVIOUS, dg);
+			new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
+			    + _tcmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
+			
+			log_printf(DEBUG, "fsr: %i, old conc: %f, new conc: %f", *iter, old_conc, new_conc);
+			
+			static_cast<FunctionalMaterial*>(materials[*iter])->setPrecConc(CURRENT, new_conc, dg);
+		    }
+		}
 	    }
 	}
+
+	mapPrecConc();
     }
+    else{
+	double* flux = _mesh->getFluxes(CURRENT);
+	Material** materials = _mesh->getMaterials();
+	
+	/* loop over mesh cells */
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    
+	    for (int dg = 0; dg < _ndg; dg++){
+		
+		power = 0.0;
+		
+		/* compute power in fsr */
+		for (int e = 0; e < _ng; e++)
+		    power += materials[i]->getNuSigmaF()[e]*flux[i*_ng+e] / _k_eff_0;
+		
+		if (materials[i]->isFissionable()){
+		    old_conc = static_cast<FunctionalMaterial*>(materials[i])->getPrecConc(PREVIOUS, dg);
+		    new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
+			+ _tcmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
+		    
+		    log_printf(DEBUG, "cell: %i, old conc: %f, new conc: %f", i, old_conc, new_conc);
+		    
+		    static_cast<FunctionalMaterial*>(materials[i])->setPrecConc(CURRENT, new_conc, dg);
+		}
+	    }
+	}	
+    }
+}
+
+
+/* map the precursor concentration fron the geometry mesh to the CMFD mesh */
+void TransientSolver::mapPrecConc(){
+
+    double prec_conc;
+    
+    /* interator to loop over fsrs in each mesh cell */
+    std::vector<int>::iterator iter;
+    Material** fine_materials = _geom_mesh->getMaterials();
+    double* fine_volumes = _geom_mesh->getVolumes();
+    Material** coarse_materials = _mesh->getMaterials();
+    double* coarse_volumes = _mesh->getVolumes();
+
+    /* loop over CMFD cells */
+    for (int i = 0; i < _mesh->getNumCells(); i++){
+	
+	for (int dg = 0; dg < _ndg; dg++){
+	    
+	    prec_conc = 0.0;
+	    
+	    /* loop over FSRs in mesh cell */
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
+		if (fine_materials[*iter]->getType() == FUNCTIONAL){
+		    prec_conc += static_cast<FunctionalMaterial*>(fine_materials[*iter])->getPrecConc(CURRENT, dg) * fine_volumes[*iter];
+		}
+	    }	    
+	    
+	    if (coarse_materials[i]->getType() == FUNCTIONAL){
+		static_cast<FunctionalMaterial*>(coarse_materials[i])->setPrecConc(CURRENT, prec_conc / coarse_volumes[i], dg);
+	    }
+	}
+    }    
 }
 
 
 /* compute the power / cc */
 double TransientSolver::computePower(materialState state){
 
-    log_printf(INFO,"Computing power...");
+    log_printf(INFO, "Computing power...");
     
     double power = 0.0;
-    double* flux = _mesh->getFluxes(state);
-    double* volumes = _mesh->getVolumes();
-    
-    for (int i = 0; i < _mesh->getNumCells(); i++){
-	for (int e = 0; e < _num_groups; e++)
-	    power += _kappa / _nu * _materials[i]->getNuSigmaF()[e]*flux[i*_num_groups + e] * volumes[i];
+ 
+    if (_solve_method == MOC){
+	std::vector<int>::iterator iter;
+	double* fine_shape = _geom_mesh->getFluxes(CURRENT);
+	double* coarse_flux = _mesh->getFluxes(CURRENT);
+	double* volumes = _mesh->getVolumes();
+	double* fine_volumes = _geom_mesh->getVolumes();
+	double* velocity = _mesh->getVelocity();
+	Material** materials = _geom_mesh->getMaterials();
+		
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){	   
+		for (int e = 0; e < _ng; e++)
+		    power += _kappa / _nu * materials[*iter]->getNuSigmaF()[e]
+			* fine_shape[*iter*_ng + e] * coarse_flux[i*_ng+e] * volumes[i] 
+			/ velocity[e] * fine_volumes[*iter];
+	    }
+	}	    
+    }
+    else{
+	double* flux = _mesh->getFluxes(state);
+	double* volumes = _mesh->getVolumes();
+	
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    for (int e = 0; e < _ng; e++)
+		power += _kappa / _nu * _mesh->getMaterials()[i]->getNuSigmaF()[e]
+		    * flux[i*_ng + e] * volumes[i];
+	}
     }
     
-    log_printf(DEBUG, "core power: %f, core power density: %f", power, power / _vol_core);
+    log_printf(DEBUG, "core power: %f, core power density: %f", power, power / _vol_core);	
     
     power = power / _vol_core;
     
@@ -336,31 +700,34 @@ void TransientSolver::initializeTransientMaterials(){
     log_printf(NORMAL, "initializing transient materials...");
 
     if (_solve_method == MOC){
-	for (int i = 0; i < _mesh->getNumFSRs(); i++){
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++){
 	    /* clone materials */
-	    if (_mesh->getFSRMaterials()[i]->getType() == BASE){
-		_mesh->getFSRMaterials()[i] = _mesh->getFSRMaterials()[i]->clone();
+	    if (_geom_mesh->getMaterials()[i]->getType() == BASE){
+		_geom_mesh->getMaterials()[i] = _geom_mesh->getMaterials()[i]->clone();
 	    }
 	    else{
-		_mesh->getFSRMaterials()[i] = static_cast<FunctionalMaterial*>(_mesh->getFSRMaterials()[i])->clone();
-	    }
-	}
-    }
-    else if (_solve_method == DIFFUSION){
-	for (int i = 0; i < _mesh->getNumCells(); i++){
-	    if (_materials[i]->getType() == FUNCTIONAL){
-		static_cast<FunctionalMaterial*>(_materials[i])->setTimeStepper(_ts);
-		static_cast<FunctionalMaterial*>(_materials[i])->initializeTransientProps(_num_delay_groups);
+		_geom_mesh->getMaterials()[i] = static_cast<FunctionalMaterial*>(_geom_mesh->getMaterials()[i])->clone();
+		static_cast<FunctionalMaterial*>(_geom_mesh->getMaterials()[i])->setTimeStepper(_ts);
+		static_cast<FunctionalMaterial*>(_geom_mesh->getMaterials()[i])->initializeTransientProps(_ndg, false);
 	    }
 	}
     }
 
+    for (int i = 0; i < _mesh->getNumCells(); i++){
+	if (_mesh->getMaterials()[i]->getType() == FUNCTIONAL){
+	    static_cast<FunctionalMaterial*>(_mesh->getMaterials()[i])->setTimeStepper(_ts);
+	    static_cast<FunctionalMaterial*>(_mesh->getMaterials()[i])->initializeTransientProps(_ndg, true);
+	}
+    }
+    
     log_printf(NORMAL, "done initializing transient materials...");
 }
 
 
 void TransientSolver::setDtMOC(double dt){
     _dt_moc = dt;
+    _mesh->setDtMOC(dt);
+    _geom_mesh->setDtMOC(dt);
 }
 
 
@@ -373,14 +740,27 @@ void TransientSolver::setDtCMFD(double dt){
 void TransientSolver::computeVolCore(){
 
     _vol_core = 0.0;
-    
-    for (int i = 0; i < _mesh->getNumCells(); i++){
-	
-	if (_materials[i]->isFissionable()){
-	    log_printf(DEBUG, "cell: %i, vol: %f", i, _mesh->getVolumes()[i]);
-	    _vol_core += _mesh->getVolumes()[i];
+
+    if (_solve_method == MOC){
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++){
+	    
+	    if (_geom_mesh->getMaterials()[i]->isFissionable()){
+		log_printf(DEBUG, "fsr: %i, vol: %f", i, _geom_mesh->getVolumes()[i]);
+		_vol_core += _geom_mesh->getVolumes()[i];
+	    }
 	}
     }
+    else{
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    
+	    if (_mesh->getMaterials()[i]->isFissionable()){
+		log_printf(DEBUG, "cell: %i, vol: %f", i, _mesh->getVolumes()[i]);
+		_vol_core += _mesh->getVolumes()[i];
+	    }
+	}	
+    }    
+    
+    log_printf(NORMAL, "core volume: %f", _vol_core);
 }
 
 
@@ -400,8 +780,10 @@ void TransientSolver::setAlpha(double alpha){
 
 
 void TransientSolver::setNumDelayGroups(int num_groups){
-    _num_delay_groups = num_groups;
+    _ndg = num_groups;
     _tcmfd->setNumDelayGroups(num_groups);
+    _mesh->setNumDelayGroups(num_groups);
+    _geom_mesh->setNumDelayGroups(num_groups);
 }
 
 
@@ -424,8 +806,36 @@ void TransientSolver::setPowerInit(double power){
 
 void TransientSolver::syncMaterials(materialState state){
 
-    for (int i = 0; i < _mesh->getNumCells(); i++){
-	if (_materials[i]->getType() == FUNCTIONAL)
-	    static_cast<FunctionalMaterial*>(_materials[i])->sync(state); 
+    if (_solve_method == MOC){
+	for (int i = 0; i < _geom_mesh->getNumCells(); i++){
+	    if (_geom_mesh->getMaterials()[i]->getType() == FUNCTIONAL){
+		static_cast<FunctionalMaterial*>(_geom_mesh->getMaterials()[i])->sync(state); 
+	    }
+	}
+
+	_mesh->computeXS(_geom_mesh, CURRENT);
+
     }
+    else{
+	for (int i = 0; i < _mesh->getNumCells(); i++){
+	    if (_mesh->getMaterials()[i]->getType() == FUNCTIONAL){
+		static_cast<FunctionalMaterial*>(_mesh->getMaterials()[i])->sync(state); 
+	    }
+	}	
+    }
+}
+
+
+double TransientSolver::getPower(){
+    return _power.back();
+}
+
+
+double TransientSolver::getTemp(){
+    return _temp.back();
+}
+
+
+double TransientSolver::getTime(){
+    return _time.back();
 }

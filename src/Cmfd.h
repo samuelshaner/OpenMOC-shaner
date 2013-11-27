@@ -47,20 +47,27 @@ protected:
   double* _sold;
   double* _snew;
   double* _phi_temp;
+  double* _b;
+  double* _b_prime;
+
 
   /* float values */
   double _conv_criteria;
   double _omega;
 
   /* integer values */
-  int _cells_x;
-  int _cells_y;
-  int _num_groups;
+  int _cx;
+  int _cy;
+  int _ng;
   int _nc;
 
   /* solve method (DIFFUSION or MOC) */
   solveType _solve_method;
   
+  double* _AM;
+  double* _y;
+
+
 public:
 	
   Cmfd(Geometry* geometry, double criteria=1e-8);
@@ -74,6 +81,7 @@ public:
   Mesh* getMesh();
   double getKeff();
   void setOmega(double omega);
+  void checkNeutronBalance();
 };
 
 #endif /* CMFD_H_ */

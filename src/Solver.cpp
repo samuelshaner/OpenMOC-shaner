@@ -402,6 +402,7 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     /* The old residual and keff */
     FP_PRECISION residual_old = 1.0;
     FP_PRECISION keff_old = 1.0;    
+    double cmfd_keff = 1.0;
 
     /* Initialize data structures */
     initializePolarQuadrature();
@@ -422,24 +423,34 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
     if (_cmfd->getMesh()->getAcceleration())
 	initializeCmfd();
     
+    log_printf(NORMAL, "Iteration %d: \tk_eff = %1.6f"
+	"\tres = %1.3E", 0, _k_eff,  residual);
+    
     /* Source iteration loop */
-    for (int i=0; i < max_iterations; i++) {
-
-        log_printf(NORMAL, "Iteration %d: \tk_eff = %1.6f"
-		 "\tres = %1.3E", i, _k_eff, residual);
-
+    for (int i=0; i < max_iterations; i++) {	
+	
 	normalizeFluxes();
 	residual = computeFSRSources();
 	transportSweep();	
 	addSourceToScalarFlux();
-
+	
 	/* update the flux with cmfd */
-	if (_cmfd->getMesh()->getAcceleration())
-	  _k_eff = _cmfd->computeKeff();
-
+	if (_cmfd->getMesh()->getAcceleration() == true){
+            _timer->stopTimer();
+	    _timer->recordSplit("Total time to converge the source");	    
+	    _timer->startTimer();
+            cmfd_keff = _cmfd->computeKeff();
+	    _timer->stopTimer();
+	    _timer->recordSplit("Time spend in CMFD Diffusion solve");
+	    _timer->startTimer();
+        }
+	
 	computeKeff();
 
 	_num_iterations++;
+
+	log_printf(NORMAL, "Iteration %d: \tk_eff = %1.6f"
+	    "\tres = %1.3E", _num_iterations, _k_eff,  residual);
 
 	/* Check for convergence of the fission source distribution */
 	if (i > 1 && residual < _source_convergence_thresh) {
@@ -502,6 +513,8 @@ void Solver::printTimerReport() {
 
     /* Get the total runtime */
     double tot_time = _timer->getSplit("Total time to converge the source");
+    double cmfd_time = _timer->getSplit("Time spend in CMFD Diffusion solve");
+    tot_time += cmfd_time;
     msg_string = "Total time to solution";
     msg_string.resize(53, '.');
     log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), tot_time);
@@ -517,6 +530,18 @@ void Solver::printTimerReport() {
     msg_string = "Solution time per iteration";
     msg_string.resize(53, '.');
     log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), time_per_iter);
+
+    if (_cmfd->getMesh()->getAcceleration() == true){
+	/* Get the total CMFD runtime */
+	msg_string = "Time solving CMFD Diffusion problem";
+	msg_string.resize(53, '.');
+	log_printf(RESULT, "%s%1.4E sec", msg_string.c_str(), cmfd_time);
+	
+	/* % runtime spend solving CMFD problem */
+	msg_string = "% of solve time spent in CMFD solver";
+	msg_string.resize(53, '.');
+	log_printf(RESULT, "%s%5.2f %%", msg_string.c_str(), cmfd_time / tot_time * 100.0);	
+    }
 
     /* Time per segment */
     int num_segments = _track_generator->getNumSegments();
@@ -557,6 +582,7 @@ void Solver::printTimerReport() {
     log_printf(SEPARATOR, "-");
 }
 
+
 void Solver::initializeCmfd(){
 
     log_printf(INFO, "initializing cmfd...");
@@ -565,4 +591,10 @@ void Solver::initializeCmfd(){
     _cmfd->getMesh()->setFSRMaterials(_FSR_materials);
     _cmfd->getMesh()->setFSRFluxes(_scalar_flux);
     _cmfd->getMesh()->setSurfaceCurrents(_surface_currents);
+
+    _geometry->getGeomMesh()->initialize();
+    _geometry->getGeomMesh()->geomSetMaterials(_FSR_materials);
+    _geometry->getGeomMesh()->geomSetVolumes(_FSR_volumes);
+    _geometry->getGeomMesh()->setFSRFluxes(_scalar_flux);
+    
 }

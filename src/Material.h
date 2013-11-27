@@ -111,6 +111,9 @@ protected:
     /** The material temperature */
     double* _temperature;
 
+    /** bool to indicate a transient */
+    bool _transient;
+
 public:
     Material(short int id);
     virtual ~Material();
@@ -141,6 +144,7 @@ public:
     void setChi(double* xs, int num_groups);
     void setBuckling(double* xs, int num_groups);
     void setDifCoef(double* xs, int num_groups);
+    void computeSigmaT();
     
     void setSigmaTByGroup(double xs, int group);
     void setSigmaAByGroup(double xs, int group);
@@ -151,7 +155,7 @@ public:
     void setBucklingByGroup(double xs, int group);
     void setDifCoefByGroup(double xs, int group);
     void setDifHatByGroup(double xs, int group, int surface);
-    void setDifTildeByGroup(double xs, int group, int surface);
+    void setDifTildeByGroup(double xs, int group, int surface, materialState state=FORWARD);
 
     void checkSigmaT();
     std::string toString();
@@ -168,6 +172,8 @@ public:
     materialType getType();
     void copySigmaS(Material* material);
     void copySigmaA(Material* material);
+    
+    void setTransient(bool transient);
 };
 
 

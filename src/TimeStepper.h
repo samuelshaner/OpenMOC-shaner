@@ -16,12 +16,12 @@
  * Material states
  */
 enum materialState {
-    REFERENCE,
     PREVIOUS_CONV,
     PREVIOUS,
     CURRENT,
     FORWARD,
-    ADJ
+    FSR,
+    FSR_OLD
 };
 
 class TimeStepper {

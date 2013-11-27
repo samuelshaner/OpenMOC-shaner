@@ -29,6 +29,14 @@ enum solveType {
 	MOC
 };
 
+enum transientType {
+  NONE,
+  ADIABATIC,
+  IQS,
+  OMEGA_MODE
+};
+
+
 class Mesh {
 
 private:
@@ -49,6 +57,7 @@ private:
 
   /* number of groups */
   int _num_groups;
+  int _num_delay_groups;
 
   /* number of surface current values */
   int _num_currents;
@@ -81,6 +90,9 @@ private:
   /* map of fluxes mapped onto mesh */
   std::map<materialState, double*> _fluxes;
 
+  /* map of fsrs to cells */
+  int* _FSRs_to_cells;
+
   /* materials array */
   Material** _materials;
 
@@ -104,7 +116,16 @@ private:
 
   /* solve method (DIFFUSION or MOC) */
   solveType _solve_method;
+  transientType _transient_method;
 
+  double* _lambda;
+  double* _beta;
+  double _beta_sum;
+  double* _velocity;
+  bool _initial_state;
+  double _k_eff_0;
+  double _dt_moc;
+  
 public:
   Mesh(solveType solve_type=MOC, bool cmfd_on=false,
        double relax_factor=0.6, int mesh_level=-1);
@@ -113,8 +134,8 @@ public:
   void setFSRBounds();
   void setCellBounds();
 
-  void computeDs();
-  void computeXS();
+  void computeDs(double relax_factor=-1.0);
+  void computeXS(Mesh* mesh=NULL, materialState state=FSR);
   double computeDiffCorrect(double d, double h);
   void updateMOCFlux();
 
@@ -176,7 +197,6 @@ public:
   void initializeSurfaceCurrents();
   void createNewFlux(materialState state);
   void copyFlux(materialState from_state, materialState to_state);
-  double getLeakage(materialState state, int group, bool adj_weight);
   void dumpFlux(materialState state);
   void dumpXS();
 
@@ -184,7 +204,35 @@ public:
   void setFSRVolumes(FP_PRECISION* FSR_volumes);
   void setFSRFluxes(FP_PRECISION* scalar_flux);
   Material** getFSRMaterials();
+  FP_PRECISION* getFSRFluxes();
 
+  void geomSetMaterials(Material** FSR_materials);
+  void geomSetVolumes(FP_PRECISION* FSR_volumes);
+
+  void setNumDelayGroups(int num_groups);
+  int getNumDelayGroups();
+
+  void setLambda(double* decay_constant, int ndg);
+  void setBeta(double* beta, int ndg);
+  void setVelocity(double* velocity, int ng);
+  double* getLambda();
+  double* getBeta();
+  double getBetaSum();
+  double* getVelocity();
+  transientType getTransientType();
+  void setTransientType(transientType trans_method);
+  void setInitialState(bool init);
+  bool getInitialState();
+  void setKeff0(double k_eff_0);
+  double getKeff0();
+  void setDtMOC(double dt);
+  double getDtMOC();
+  void setFSRToCell(int fsr_id, int cell_id);
+  int* getFSRsToCells();
+
+  void reconstructFineFlux(double* geom_shape, double* geom_flux, double* mesh_flux);
+  void computeFineShape(double* geom_shape, double* mesh_flux);
+  void zeroDs();
 };
 
 #endif /* MESH_H_ */

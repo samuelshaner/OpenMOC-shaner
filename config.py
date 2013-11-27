@@ -64,13 +64,13 @@ class configuration:
     cc = 'gcc'
 
     # Default floating point for the main openmoc module is single precision
-    fp = 'single'
+    fp = 'double'
 
     # Supported C++ compilers: 'gcc', 'icpc', 'bgxlc', 'nvcc', 'all'
     cpp_compilers = []
 
     # Supported floating point precision levels: 'single', 'double', 'all'
-    fp_precision = []
+    fp_precision = ['double']
 
     # Compile using ccache (for developers needing fast recompilation)
     with_ccache = False

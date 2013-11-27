@@ -92,14 +92,14 @@ void FunctionalMaterial::setSigmaATime(int num_time_steps, int num_groups, doubl
 
   /* load _sigma_t_ref with all xs */
   for (int i = 0; i < num_time_steps*num_groups; i++)
-    _sigma_a_ref[i] = xs[i];
-
-    for (int i = 0; i < _num_groups; i++){
+      _sigma_a_ref[i] = xs[i];
+  
+  for (int i = 0; i < _num_groups; i++){
       _sigma_a[i] = xs[i];
       
       if (_buckling != NULL && _dif_coef != NULL)
-        _sigma_a[i] += _buckling[i] * _dif_coef[i];
-    }
+	  _sigma_a[i] += _buckling[i] * _dif_coef[i];
+  }
 }
 
 
@@ -132,12 +132,11 @@ FunctionalMaterial* FunctionalMaterial::clone(){
   else
     to_mat->setSigmaA(_sigma_a_ref, _num_groups);
   
-  to_mat->setTemperature(REFERENCE, getTemperature(REFERENCE));
   to_mat->setTemperature(PREVIOUS, getTemperature(PREVIOUS));
   to_mat->setTemperature(PREVIOUS_CONV, getTemperature(PREVIOUS_CONV));
   to_mat->setTemperature(CURRENT, getTemperature(CURRENT));
   to_mat->setTemperature(FORWARD, getTemperature(FORWARD));
-  to_mat->setTemperature(ADJ, getTemperature(ADJ));
+  to_mat->setTemperature(FSR, getTemperature(FSR));
 
   if (_gamma != NULL)
     to_mat->setGamma(_gamma, _num_groups);
@@ -179,20 +178,30 @@ void FunctionalMaterial::sigmaAFuncTime(bool func_time){
 /* sync current cross sections with current time and temperature */
 void FunctionalMaterial::sync(materialState state){
   
+    double sigma_t_tot;
+    
   /* SIGMA_A */
   for (int g = 0; g < _num_groups; g++){
     
-    if (_sigma_a_func_time){
+      sigma_t_tot = 0.0;
+
+    if (_sigma_a_func_time)
       _sigma_a[g] = interpolateXS(_sigma_a_ref, state, g);
-    }
     else
       _sigma_a[g] = _sigma_a_ref[g];
       
     if (_sigma_a_func_temp)
-      _sigma_a[g] = _sigma_a[g] * (1.0 + _gamma[g] * (pow(getTemperature(state),0.5) - pow(getTemperature(REFERENCE), 0.5)));
+      _sigma_a[g] = _sigma_a[g] * (1.0 + _gamma[g] * (pow(getTemperature(state),0.5) - pow(300.0, 0.5)));
       
     if (_buckling != NULL && _dif_coef != NULL)
 	_sigma_a[g] += _buckling[g] * _dif_coef[g];
+
+    for (int G = 0; G < _num_groups; G++)
+	sigma_t_tot += _sigma_s[G*_num_groups + g];
+
+    sigma_t_tot += _sigma_a[g];
+
+    _sigma_t[g] = sigma_t_tot;
 
   }
 }
@@ -229,12 +238,18 @@ double FunctionalMaterial::interpolateXS(double* xs_ref, materialState state, in
 }
 
 
-void FunctionalMaterial::initializeTransientProps(double num_delay_groups){
+void FunctionalMaterial::initializeTransientProps(double num_delay_groups, bool cmfd_mesh){
 
   _num_delay_groups = num_delay_groups;
   _prec_conc = new double[_num_delay_groups*6];
   _prec_freq = new double[_num_delay_groups*6];
-  
+
+  if (cmfd_mesh){
+      if (_dif_tilde != NULL)
+	  delete [] _dif_tilde;
+      
+      _dif_tilde = new double[_num_groups*4*6];
+  }
 }
 
 void FunctionalMaterial::setPrecConc(materialState state, double conc, int group){
@@ -265,6 +280,7 @@ void FunctionalMaterial::copyPrecFreq(materialState state_from, materialState st
     _prec_freq[(int)state_to *_num_delay_groups + dg] = _prec_freq[(int)state_from *_num_delay_groups + dg];
 }
 
+
 void FunctionalMaterial::setTimeStepper(TimeStepper* ts){
   _ts = ts;
 }
@@ -282,7 +298,7 @@ double FunctionalMaterial::getSigmaAByValue(materialState state, int group) {
     xs = interpolateXS(_sigma_a_ref, state, group);
   
   if (_sigma_a_func_temp)
-    xs = xs * (1.0 + _gamma[group] * (pow(getTemperature(state),0.5) - pow(getTemperature(REFERENCE), 0.5)));
+      xs = xs * (1.0 + _gamma[group] * (pow(getTemperature(state),0.5) - pow(300.0, 0.5)));
   
   if (_buckling != NULL && _dif_coef != NULL)
     xs += _buckling[group] * _dif_coef[group];

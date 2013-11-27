@@ -12,7 +12,7 @@ TimeStepper::TimeStepper(double start_time, double end_time, double dt_moc, doub
     for (int i = 0; i < 6; i++)
 	_state_times[i] = _start_time;
     
-    _state_times[4] += _dt_moc;
+    _state_times[int(FORWARD)] += _dt_moc;
 }
 
 
@@ -32,8 +32,8 @@ double TimeStepper::getEndTime(){
 
 
 void TimeStepper::takeStep(){
-    _state_times[2] = _state_times[3];
-    _state_times[3] += _dt_cmfd;
+    _state_times[int(PREVIOUS)] = _state_times[int(CURRENT)];
+    _state_times[int(CURRENT)] += _dt_cmfd;
 }
 
 
@@ -44,7 +44,7 @@ void TimeStepper::setTime(materialState state, double time){
 
 double TimeStepper::getImprovedRatio(){
 
-    double ratio = (_state_times[3] - _state_times [1]) / _dt_moc;
+    double ratio = (_state_times[int(CURRENT)] - _state_times [int(PREVIOUS_CONV)]) / _dt_moc;
     return ratio;
 }
 
@@ -64,17 +64,14 @@ double TimeStepper::getDtCMFD(){
 
 
 void TimeStepper::convergedMOCStep(){
-    _state_times[1] = _state_times[3];
+    _state_times[int(PREVIOUS_CONV)] = _state_times[int(CURRENT)];
 }
 
 void TimeStepper::printTimes(){
 
-    log_printf(NORMAL, "REFERENCE TIME: %f", _state_times[0]);
-    log_printf(NORMAL, "PREVIOUS_CONV TIME: %f", _state_times[1]);
-    log_printf(NORMAL, "PREVIOUS TIME: %f", _state_times[2]);
-    log_printf(NORMAL, "CURRENT TIME: %f", _state_times[3]);
-    log_printf(NORMAL, "FORWARD TIME: %f", _state_times[4]);
-    log_printf(NORMAL, "ADJOINT TIME: %f", _state_times[5]);
+    log_printf(NORMAL, "PREVIOUS_CONV TIME: %f", _state_times[int(PREVIOUS_CONV)]);
+    log_printf(NORMAL, "PREVIOUS TIME: %f", _state_times[int(PREVIOUS)]);
+    log_printf(NORMAL, "CURRENT TIME: %f", _state_times[int(CURRENT)]);
 }
 
 

@@ -93,6 +93,9 @@
 %include typemaps.i
 
 
+%typemap(in) (){
+}
+
 %typemap(in) (double* xs, int num_groups) {
 
     if (!PyList_Check($input)) {

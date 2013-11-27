@@ -162,9 +162,6 @@ def materialize(filename):
             else:
                 new_material.setSigmaA(data[name]['Absorption XS'])
             
-            if 'Total XS' in data[name].keys():
-                new_material.setSigmaT(data[name]['Total XS'])
-                
             if 'Scattering XS' in data[name].keys():
                 new_material.setSigmaS(data[name]['Scattering XS'])
 
@@ -179,6 +176,9 @@ def materialize(filename):
             
             if 'Gamma' in data[name].keys():
                 new_material.setGamma(data[name]['Gamma'])
+
+            # compute sigma_t
+            new_material.computeSigmaT()
 
               
             # Add this material to the list

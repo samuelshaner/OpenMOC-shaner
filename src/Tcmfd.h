@@ -21,13 +21,6 @@
 #include <vector>
 #endif
 
-enum transientType {
-  NONE,
-  ADIABATIC,
-  IQS,
-  OMEGA_MODE
-};
-
 
 class Tcmfd{
 protected:
@@ -60,6 +53,7 @@ protected:
   double* _phi_temp;
   double* _snew;
   double* _sold;
+  double* _AM;
  
   /* materials parameters */
   double* _beta;
@@ -93,9 +87,13 @@ public:
   
   void setInitialState(bool state);
   void setNumDelayGroups(int num_groups);
+  int getNumDelayGroups();
 
   Mesh* getMesh();
   void setOmega(double omega);
+
+  void checkNeutronBalance();
+  void checkNeutronBalance2();
 };
 
 #endif /* TCMFD_H_ */

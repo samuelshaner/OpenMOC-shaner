@@ -95,7 +95,7 @@ public:
     double getPrecFreq(materialState state, int group);
     void copyPrecConc(materialState state_from, materialState state_to);
     void copyPrecFreq(materialState state_from, materialState state_to);
-    void initializeTransientProps(double num_delay_groups);
+    void initializeTransientProps(double num_delay_groups, bool cmfd_mesh);
 
     /* set time stepper */
     void setTimeStepper(TimeStepper* ts);

@@ -24,6 +24,8 @@ Geometry::Geometry(Mesh* mesh) {
     _num_FSRs = 0;
     _num_groups = 0;
 
+    _geom_mesh = new Mesh();
+
     if (mesh == NULL)
         _mesh = new Mesh();
     else
@@ -1568,7 +1570,7 @@ void Geometry::initializeMesh(){
     
     /* Decide whether cmfd acceleration is really needed for MOC acceleration */
     if (_num_FSRs <= 1000 && _mesh->getSolveType() == MOC){
-      _mesh->setAcceleration(false);
+     _mesh->setAcceleration(false);
       log_printf(INFO, "Cmfd acceleration was turned off because there are "
 		"<= 100 fsrs and CMFD is not needed for small geometries");
     }
@@ -1587,14 +1589,21 @@ void Geometry::initializeMesh(){
     else{
       _mesh->setCellLengthX(0, getWidth());
       _mesh->setCellLengthY(0, getHeight());
-      for (int fsr = 0; fsr < _num_FSRs; fsr++)
+      for (int fsr = 0; fsr < _num_FSRs; fsr++){
 	_mesh->getCellFSRs()->at(0).push_back(fsr);
+	_mesh->setFSRToCell(fsr, 0);
+      }
     }
 
     /* set mesh fsr and cell bounds and initialize materials */
     _mesh->setFSRBounds();
     _mesh->setCellBounds();
     _mesh->initializeMaterials(&_materials, _FSRs_to_materials_id);
+
+    /* initialize geometry mesh */
+    _geom_mesh->setCellsX(_num_FSRs);
+    _geom_mesh->setCellsY(1);
+    _geom_mesh->setNumGroups(_num_groups);
 
     return;
 }
@@ -1625,6 +1634,7 @@ void Geometry::findFSRs(Universe* univ, int cell_num, int *fsr_id){
 	    if (curr->getType() == MATERIAL) {
 	        log_printf(DEBUG, "pushing back fsr id: %i", *fsr_id);
 		_mesh->getCellFSRs()->at(cell_num).push_back(*fsr_id);
+		_mesh->setFSRToCell(*fsr_id, cell_num);
 		log_printf(DEBUG, "cell num %i, fsr list: %i", cell_num, _mesh->getCellFSRs()->at(cell_num).size());
 		*fsr_id += 1;
 	    }
@@ -1978,4 +1988,9 @@ int Geometry::findMeshDepth(Universe* univ, int mesh_level){
 
 Mesh* Geometry::getMesh(){
     return _mesh;
+}
+
+
+Mesh* Geometry::getGeomMesh(){
+    return _geom_mesh;
 }
