@@ -21,7 +21,8 @@ enum materialState {
     CURRENT,
     FORWARD,
     FSR,
-    FSR_OLD
+    FSR_OLD,
+    FORWARD_PREV
 };
 
 class TimeStepper {

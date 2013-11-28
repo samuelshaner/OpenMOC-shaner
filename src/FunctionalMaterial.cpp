@@ -244,12 +244,6 @@ void FunctionalMaterial::initializeTransientProps(double num_delay_groups, bool 
   _prec_conc = new double[_num_delay_groups*6];
   _prec_freq = new double[_num_delay_groups*6];
 
-  if (cmfd_mesh){
-      if (_dif_tilde != NULL)
-	  delete [] _dif_tilde;
-      
-      _dif_tilde = new double[_num_groups*4*6];
-  }
 }
 
 void FunctionalMaterial::setPrecConc(materialState state, double conc, int group){

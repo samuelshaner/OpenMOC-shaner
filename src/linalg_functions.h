@@ -30,6 +30,7 @@ inline void vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y, int 
 inline void vecWAXPY(float* vec_w, double a, double* vec_x, double* vec_y, int length);
 inline void linearSolve(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter);
 inline void dumpVector(double* vec, int length);
+inline void vecDivide(double* vec_w, double* vec_y, double* vec_x, int length);
 
 double rayleighQuotient(double* A, double* M, double* x, double* snew, double* sold, int cx, int cy, int ng){
 
@@ -273,5 +274,15 @@ void dumpVector(double* vec, int length){
 
 }
 
+
+void vecDivide(double* vec_w, double* vec_y, double* vec_x, int length){
+
+
+    for (int i = 0; i < length; i++){
+	if (vec_x[i] != 0.0)
+	    vec_w[i] = vec_y[i] / vec_x[i];
+    }
+
+}
 
 #endif /* LINALG_FUNCTIONS_H_ */

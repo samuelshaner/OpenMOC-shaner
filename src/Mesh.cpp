@@ -95,6 +95,8 @@ void Mesh::initialize(){
 
     /* allocate memory for FSRs to cells map */
     _FSRs_to_cells = new int[_num_fsrs];
+
+    _frequency = new double[_cells_x*_cells_y*_num_groups];
     
     /* allocate memory for fluxes */
     double* flux_fsr;
@@ -118,6 +120,7 @@ void Mesh::initialize(){
 	    for (int g = 0; g < _num_groups; g++){
 	        flux_fsr[(y*_cells_x+x)*_num_groups + g] = 1.0;
 	        flux_cur[(y*_cells_x+x)*_num_groups + g] = 1.0;
+		_frequency[(y*_cells_x+x)*_num_groups + g] = 0.0;
 	    }
 
 	    /* allocate memory for fsr vector */
@@ -269,7 +272,7 @@ void Mesh::computeDs(double relax_factor){
     double sense;
     int next_surface;
     int cell, cell_next;
-    
+
     double* fluxes = getFluxes(FSR_OLD);
     
     /* loop over mesh cells in y direction */
@@ -417,12 +420,13 @@ void Mesh::computeDs(double relax_factor){
 		    }  
 
 		    /* perform underrelaxation on d_tilde */
-		    d_tilde = _materials[cell]->getDifTilde()[surface*_num_groups + e] * (1 - relax_factor) + relax_factor * d_tilde;
+		    d_tilde = _materials[cell]->getDifTilde()[int(FORWARD)*4*_num_groups + surface*_num_groups + e] * (1 - relax_factor) + relax_factor * d_tilde;
 		    
 		    /* set d_hat and d_tilde */
 		    _materials[cell]->setDifHatByGroup(d_hat, e, surface);
+		    
 		    _materials[cell]->setDifTildeByGroup(d_tilde, e, surface);
-
+		    
 		    log_printf(DEBUG, "c: %i, g: %i, s: %i, cur_dif: %.12f", y*_cells_x + x, e, surface, current -length * (-d_tilde*(flux+flux_next) - sense * d_hat * (flux_next - flux)));
 		    
 		}
@@ -1662,22 +1666,71 @@ int* Mesh::getFSRsToCells(){
 }
 
 
-void Mesh::zeroDs(){
+void Mesh::interpolateDs(double ratio){
+
+    int ngs = 4*_num_groups;
+    double* dif_tilde;
+    double slope;
 
     /* loop over mesh cells in y direction */
     for (int i = 0; i < _cells_y * _cells_x; i++){
-	
-	/* loop over surfaces in a cell */
-	for (int surface = 0; surface < 4; surface++){
-	    
-	    /* loop over groups */
-	    for (int e = 0; e < _num_groups; e++){
-		
-		/* set d_hat and d_tilde */
-		_materials[i]->setDifHatByGroup(0.0, e, surface);
-		_materials[i]->setDifTildeByGroup(0.0, e, surface);
-		
-	    }
+	dif_tilde = _materials[i]->getDifTilde();
+
+	/* loop over surfaces and groups in a cell */
+	for (int gs = 0; gs < ngs; gs++){
+	    slope = dif_tilde[int(FORWARD)*ngs+gs] - dif_tilde[int(PREVIOUS_CONV)*ngs+gs];
+	    dif_tilde[int(CURRENT)*ngs+gs] = dif_tilde[int(PREVIOUS_CONV)*ngs+gs] + ratio * slope;
 	}
     }
+}
+
+
+void Mesh::interpolateFlux(double ratio){
+
+    double* fwd_flux = getFluxes(FORWARD);
+    double* pre_flux = getFluxes(PREVIOUS_CONV);
+    double* cur_flux = getFluxes(CURRENT);
+    double slope;
+
+    for (int i = 0; i < _num_groups*_cells_x*_cells_y; i++){
+	slope = fwd_flux[i] - pre_flux[i];
+	cur_flux[i] = pre_flux[i] + ratio * slope;
+    }
+}
+
+
+void Mesh::normalizeFlux(double scale_val){
+
+    double* flux = getFluxes(CURRENT);
+
+    for (int i = 0; i < _num_groups*_cells_x*_cells_y; i++)
+	flux[i] *= scale_val;
+}
+
+
+void Mesh::normalizeDs(double scale_val){
+
+    double* flux = getFluxes(CURRENT);
+    int ngs = 4*_num_groups;
+
+    for (int i = 0; i < _cells_x*_cells_y; i++){
+	for (int gs = 0; gs < ngs; gs++)
+	    _materials[i]->getDifTilde()[int(FORWARD)*ngs + gs] *= scale_val;
+    }
+}
+
+
+void Mesh::zeroDs(){
+
+    int ngs = 4*_num_groups;
+
+    for (int i = 0; i < _cells_x*_cells_y; i++){
+	for (int gs = 0; gs < ngs; gs++)
+	    _materials[i]->getDifTilde()[int(FORWARD)*ngs+gs] = 0.0;
+    }
+}
+
+
+double* Mesh::getFrequency(){
+    return _frequency;
 }

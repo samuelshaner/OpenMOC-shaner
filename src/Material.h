@@ -111,9 +111,6 @@ protected:
     /** The material temperature */
     double* _temperature;
 
-    /** bool to indicate a transient */
-    bool _transient;
-
 public:
     Material(short int id);
     virtual ~Material();
@@ -173,7 +170,6 @@ public:
     void copySigmaS(Material* material);
     void copySigmaA(Material* material);
     
-    void setTransient(bool transient);
 };
 
 

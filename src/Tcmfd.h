@@ -70,6 +70,7 @@ public:
   Tcmfd(Geometry* geometry, double criteria=1e-8);
   virtual ~Tcmfd();
   void constructMatrices();
+  void constructJacobian();
   void solveTCMFD();
   void setTransientType(transientType trans_type);
   void setKeff0(double keff_0);
@@ -94,6 +95,7 @@ public:
 
   void checkNeutronBalance();
   void checkNeutronBalance2();
+  void computeFrequency();
 };
 
 #endif /* TCMFD_H_ */

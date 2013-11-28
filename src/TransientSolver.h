@@ -64,7 +64,7 @@ public:
     /* worker functions */
     double computeCoreTemp();  
     void computeVolCore();
-    void syncMaterials(materialState state);
+    void sync(materialState state);
     void copyPrecConc(materialState state_from, materialState state_to);
     void copyTemperature(materialState state_from, materialState state_to);
     void copyFieldVariables(materialState state_from, materialState state_to);

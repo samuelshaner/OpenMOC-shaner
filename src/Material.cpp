@@ -46,7 +46,6 @@ Material::Material(short int id) {
 
     _fissionable = false;
     _data_aligned = false;
-    _transient = false;
     
     _temperature = new double[6];
     
@@ -279,8 +278,8 @@ double* Material::getDifHat() {
 double* Material::getDifTilde() {
 
   if (_dif_tilde == NULL){
-    _dif_tilde = new double[4*_num_groups];
-    for (int e = 0; e < 4*_num_groups; e++)
+    _dif_tilde = new double[6*4*_num_groups];
+    for (int e = 0; e < 6*4*_num_groups; e++)
       _dif_tilde[e] = 0.0;
   }
 
@@ -777,16 +776,15 @@ void Material::setDifTildeByGroup(double xs, int group, int surface, materialSta
         		" for material %d which contains %d energy groups",
 		   group, _num_groups, _uid);
 
+    int ngs = 4*_num_groups;
+
     if (_dif_tilde == NULL){
-      _dif_tilde = new double[4*_num_groups];
-      for (int i=0; i < _num_groups*4; i++)
-	  _dif_tilde[_num_groups*4+i] = 0.0;
+      _dif_tilde = new double[6*ngs];
+      for (int i=0; i < 6*ngs; i++)
+	  _dif_tilde[i] = 0.0;
     }
 
-    if (_transient)
-	_dif_tilde[int(state)*_num_groups*4 + surface*_num_groups + group] = xs;
-    else
-	_dif_tilde[surface*_num_groups + group] = xs;
+    _dif_tilde[int(state)*ngs + surface*_num_groups + group] = xs;
 }
 
 
@@ -1023,10 +1021,21 @@ Material* Material::clone(){
       for (int s = 0; s < 4; s++)
 	material_clone->setDifHatByGroup(_dif_hat[s*_num_groups+i], i, s);  
 
-  if (_dif_tilde != NULL)
-    for (int i = 0; i < _num_groups; i++)
-      for (int s = 0; s < 4; s++)
-	material_clone->setDifTildeByGroup(_dif_tilde[s*_num_groups+i], i, s);  
+  int ngs = _num_groups*4;
+
+  if (_dif_tilde != NULL){
+      for (int i = 0; i < _num_groups; i++){
+	  for (int s = 0; s < 4; s++){
+	      material_clone->setDifTildeByGroup(_dif_tilde[0*ngs + s*_num_groups+i], i, s, PREVIOUS_CONV);  
+	      material_clone->setDifTildeByGroup(_dif_tilde[1*ngs + s*_num_groups+i], i, s, PREVIOUS);  
+	      material_clone->setDifTildeByGroup(_dif_tilde[2*ngs + s*_num_groups+i], i, s, CURRENT);  
+	      material_clone->setDifTildeByGroup(_dif_tilde[3*ngs + s*_num_groups+i], i, s, FORWARD);  
+	      material_clone->setDifTildeByGroup(_dif_tilde[4*ngs + s*_num_groups+i], i, s, FSR);  
+	      material_clone->setDifTildeByGroup(_dif_tilde[5*ngs + s*_num_groups+i], i, s, FSR_OLD);  
+	  }
+      }
+  }
+
 
   copySigmaA(material_clone);
   copySigmaS(material_clone);
@@ -1085,9 +1094,4 @@ void Material::copyTemperature(materialState state_from, materialState state_to)
 
 materialType Material::getType(){
   return _type;
-}
-
-
-void Material::setTransient(bool transient){
-    _transient = transient;
 }

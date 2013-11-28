@@ -89,6 +89,7 @@ private:
 
   /* map of fluxes mapped onto mesh */
   std::map<materialState, double*> _fluxes;
+  double* _frequency;
 
   /* map of fsrs to cells */
   int* _FSRs_to_cells;
@@ -197,6 +198,7 @@ public:
   void initializeSurfaceCurrents();
   void createNewFlux(materialState state);
   void copyFlux(materialState from_state, materialState to_state);
+  void copyDs(materialState from_state, materialState to_state);
   void dumpFlux(materialState state);
   void dumpXS();
 
@@ -232,7 +234,13 @@ public:
 
   void reconstructFineFlux(double* geom_shape, double* geom_flux, double* mesh_flux);
   void computeFineShape(double* geom_shape, double* mesh_flux);
+  void interpolateDs(double ratio);
+  void interpolateFlux(double ratio);
+  void normalizeFlux(double scale_val);
+  void normalizeDs(double scale_val);
   void zeroDs();
+
+  double* getFrequency();
 };
 
 #endif /* MESH_H_ */

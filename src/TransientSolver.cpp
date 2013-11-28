@@ -26,6 +26,7 @@ TransientSolver::TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd, Solve
     _mesh->createNewFlux(PREVIOUS);
     _mesh->createNewFlux(PREVIOUS_CONV);    
     _mesh->createNewFlux(FORWARD);
+    _mesh->createNewFlux(FORWARD_PREV);
     
     /* create new flux arrays */
     if (_solve_method == MOC){
@@ -67,7 +68,7 @@ void TransientSolver::solveInitialState(){
 	_mesh->copyFlux(FSR_OLD, PREVIOUS);
 	_mesh->copyFlux(FSR_OLD, PREVIOUS_CONV);
 	_mesh->copyDs(FORWARD, CURRENT);
-	_mesh->copyDs(FORWARD, PREVOIUS_CONV);
+	_mesh->copyDs(FORWARD, PREVIOUS_CONV);
 
 	/* convert FSR flux to shape function */
 	_mesh->computeFineShape(_geom_mesh->getFluxes(CURRENT), _mesh->getFluxes(CURRENT));
@@ -75,6 +76,7 @@ void TransientSolver::solveInitialState(){
 	/* copy fine mesh shape to FORWARD and PREVIOUS_CONV */
 	_geom_mesh->copyFlux(CURRENT, PREVIOUS);
 	_geom_mesh->copyFlux(CURRENT, PREVIOUS_CONV);
+	_geom_mesh->copyFlux(CURRENT, FORWARD);
 
     } 
 
@@ -105,12 +107,14 @@ void TransientSolver::solveInitialState(){
 void TransientSolver::solveOuterStep(){
   
     /* set time integration parameters */
-    double tolerance = 1.e-6;
+    double tolerance_in = 1.e-6;
+    double tolerance_out = 1.e-6;
     int length_conv = _power.size();
     double residual_out = 1.0;
     double residual_in = 1.0;
     int iter = 0;
     double k_eff;
+    double new_power;
 
     if (_ts->getTime(CURRENT) == _start_time)
 	_timer->startTimer();
@@ -122,17 +126,18 @@ void TransientSolver::solveOuterStep(){
 	int len_conv = _power.size();
 
 	/* converge the source on the outer time step fine mesh */
-	while (residual_out > tolerance){
+	while (residual_out > tolerance_out){
 
 	    /* set FORWARD flux to test for convergence */
 	    _geom_mesh->copyFlux(CURRENT, FORWARD);
+	    _mesh->copyFlux(CURRENT, FORWARD_PREV);
 
 	    /* trim power, temp, and time to account due to implicit solve */
 	    trimVectors(len_conv);
 	    
 	    /* reset CURRENT time */
-	    _ts->setTime(CURRENT , _ts->getTime(PREVIOUS_CONV));
-	    _ts->setTime(PREVIOUS , _ts->getTime(PREVIOUS_CONV));
+	    _ts->setTime(CURRENT, _ts->getTime(PREVIOUS_CONV));
+	    _ts->setTime(PREVIOUS, _ts->getTime(PREVIOUS_CONV));
 
 	    /* reset precursor concentrations to PREVIOUS_CONV */
 	    copyFieldVariables(PREVIOUS_CONV, CURRENT);
@@ -151,20 +156,18 @@ void TransientSolver::solveOuterStep(){
 		_ts->takeStep();
 		
 		/* insertion of reactivity */
-		syncMaterials(CURRENT);
+		sync(CURRENT);
 
-		/* interpolate fine mesh shape and Ds */
-
-		/* homogenize xs and update precursor concentration */
+		/* update precursor concentration */
 		updatePrecursorConc();
 
 		/* take outer step */
-		while (residual_in > tolerance){
+		while (residual_in > tolerance_in){
 		    _mesh->copyFlux(CURRENT, FORWARD);
 		    _tcmfd->solveTCMFD();
 		    updateTemperatures();
 		    updatePrecursorConc();
-		    syncMaterials(CURRENT);
+		    sync(CURRENT);
 		    residual_in = computeResidual(DIFFUSION);
 		    iter++;
 		}	
@@ -180,18 +183,28 @@ void TransientSolver::solveOuterStep(){
 		log_printf(NORMAL, "TIME: %f, POWER: %.12f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  		
 	    }
 
+	    /* compute frequencies */
+	    _tcmfd->computeFrequency();
+
 	    /* compute new shape function and check for outer loop convergence */
 	    k_eff = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);
+
+	    /* reset mesh amplitude to CURRENT state */
 	    _mesh->copyFlux(PREVIOUS, CURRENT);
+
+	    /* compute the fine shape */
 	    _mesh->computeFineShape(_geom_mesh->getFluxes(CURRENT), _mesh->getFluxes(CURRENT));
+
+	    /* compute and print residual */
 	    residual_out = computeResidual(MOC);
-	    //log_printf(NORMAL, "Fine mesh flux tolerace: %.10f, residual: %.10f", tolerance, residual_out); 
+	    log_printf(NORMAL, "tolerance: %f, resid out: %f", tolerance_out, residual_out);
 	}
 
 	/* copy converged field variables */
 	copyFieldVariables(CURRENT, PREVIOUS_CONV);
 	_mesh->copyFlux(CURRENT, PREVIOUS_CONV);
-	
+	_mesh->copyDs(FORWARD, PREVIOUS_CONV);
+
 	/* set PREVIOUS_CONV time */
 	_ts->convergedMOCStep();
     }
@@ -199,17 +212,17 @@ void TransientSolver::solveOuterStep(){
 	while (_ts->getTime(CURRENT) < _ts->getTime(PREVIOUS_CONV) + _ts->getDtMOC() - 1e-8){
 	    iter = 0;
 	    _ts->takeStep();
-	    syncMaterials(CURRENT);
+	    sync(CURRENT);
 	    updatePrecursorConc();
 	    residual_in = 1.0;
 
 	    /* take outer step */
-	    while (residual_in > tolerance){
+	    while (residual_in > tolerance_in){
 		_mesh->copyFlux(CURRENT, FORWARD);
 		_tcmfd->solveTCMFD();
 		updateTemperatures();
 		updatePrecursorConc();
-		syncMaterials(CURRENT);
+		sync(CURRENT);
 		residual_in = computeResidual(DIFFUSION);
 		iter++;
 	    }
@@ -265,13 +278,14 @@ double TransientSolver::computeResidual(solveType solve_type){
 		}
 	    }
 	}
-
+	
 	source = source / _vol_core;
 
 	/* loop over coarse mesh cells */
 	for (int i = 0; i < _mesh->getNumCells(); i++){
 	    
 	    /* loop over fsrs within cell */
+	    /*
 	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){
 		
 		for (int e = 0; e < _ng; e++){
@@ -282,10 +296,17 @@ double TransientSolver::computeResidual(solveType solve_type){
 				   / source, 2.0);
 		}
 	    }
+	    */
+
+	    for (int e = 0; e < _ng; e++){
+		if (_mesh->getFluxes(CURRENT)[i*_ng+e] != 0.0)
+		    res += pow((_mesh->getFluxes(CURRENT)[i*_ng+e] - _mesh->getFluxes(FORWARD_PREV)[i*_ng+e]) / _mesh->getFluxes(CURRENT)[i*_ng+e], 2);
+	    }
 	}
     
 	res = pow(res, 0.5);
-	res = res / (_geom_mesh->getNumCells() * _ng);
+	res = res / (_mesh->getNumCells() * _ng);
+//	res = res / (_geom_mesh->getNumCells() * _ng);
 	
     }
     else{
@@ -788,12 +809,16 @@ void TransientSolver::setNumDelayGroups(int num_groups){
 
 
 void TransientSolver::setTransientMethod(const char* trans_type){
-
+ 
     if (strcmp("ADIABATIC", trans_type) == 0)
-	_transient_method = ADIABATIC;
+	_transient_method = ADIABATIC; 
+    else if (strcmp("OMEGA_MODE", trans_type) == 0)
+	_transient_method = OMEGA_MODE;
+    else if (strcmp("IQS", trans_type) == 0)
+	_transient_method = IQS;
     else
 	log_printf(ERROR, "Could not recognize transient method; "
-		   " the options are ADIABATIC");
+		   " the options are ADIABATIC, OMEGA_MODE, and IQS");
     
     _tcmfd->setTransientType(_transient_method);
 }
@@ -804,7 +829,7 @@ void TransientSolver::setPowerInit(double power){
 }
 
 
-void TransientSolver::syncMaterials(materialState state){
+void TransientSolver::sync(materialState state){
 
     if (_solve_method == MOC){
 	for (int i = 0; i < _geom_mesh->getNumCells(); i++){
@@ -812,9 +837,11 @@ void TransientSolver::syncMaterials(materialState state){
 		static_cast<FunctionalMaterial*>(_geom_mesh->getMaterials()[i])->sync(state); 
 	    }
 	}
-
+	
+	/* compute xs and interpolate diffusion correction factors */
+	_geom_mesh->interpolateFlux(_ts->getImprovedRatio());
 	_mesh->computeXS(_geom_mesh, CURRENT);
-
+	_mesh->interpolateDs(_ts->getImprovedRatio());
     }
     else{
 	for (int i = 0; i < _mesh->getNumCells(); i++){
