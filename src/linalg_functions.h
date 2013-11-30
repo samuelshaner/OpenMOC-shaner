@@ -29,6 +29,7 @@ inline double norm(double* x, int nc);
 inline void vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y, int length);
 inline void vecWAXPY(float* vec_w, double a, double* vec_x, double* vec_y, int length);
 inline void linearSolve(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter);
+inline void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter);
 inline void dumpVector(double* vec, int length);
 inline void vecDivide(double* vec_w, double* vec_y, double* vec_x, int length);
 
@@ -213,6 +214,117 @@ void linearSolve(double* mat, double* vec_x, double* vec_b, double* vec_x_old, d
 	for (int y = 0; y < cy; y++){
 	    for (int x = 0; x < cx; x++){
 		for (int g = 0; g < ng; g++){
+		    row = ((y*cx+x)*ng+g);
+		    val = 0.0;
+		    
+		    val += (1.0 - omega) * vec_x[row];
+		    
+		    /* source */
+		    val += omega * vec_b[row] / mat[row*(ng+4)+g+2];
+		    
+		    /* left surface */
+		    if (x != 0)
+			val -= omega * vec_x[(y*cx+x-1)*ng+g] * mat[row*(ng+4)] / mat[row*(ng+4)+g+2];
+		   	    
+		    /* bottom surface */
+		    if (y != cy - 1)
+			val -= omega * vec_x[((y+1)*cx+x)*ng+g] * mat[row*(ng+4)+1] / mat[row*(ng+4)+g+2];
+		    
+		    /* group to group */
+		    for (int e = 0; e < ng; e++){
+			if (e != g)
+			    val -= omega * vec_x[(y*cx+x)*ng+e] * mat[row*(ng+4)+2+e] / mat[row*(ng+4)+2+g];
+		    }
+		    
+		    /* right surface */
+		    if (x != cx - 1)
+			val -= omega * vec_x[(y*cx+x+1)*ng+g] * mat[row*(ng+4)+ng+2] / mat[row*(ng+4)+g+2];
+		    
+		    /* top surface */
+		    if (y != 0)
+			val -= omega * vec_x[((y-1)*cx+x)*ng+g] * mat[row*(ng+4)+ng+3] / mat[row*(ng+4)+g+2];
+		    
+		    vec_x[row] = val;
+		}
+	    }
+	}
+	
+	norm = 0.0;
+	for (int i = 0; i < cx*cy*ng; i++){
+	    if (vec_x[i] != 0.0)
+		norm += pow((vec_x[i] - vec_x_old[i])/(vec_x[i]), 2);
+	}
+
+	norm = pow(norm, 0.5) / (cx*cy*ng);
+	iter++;
+
+        //std::cout << "vec x sum: " << vecSum(vec_x, cx*cy*ng) << std::endl;
+
+	if (iter == max_iter)
+	    break;
+    }
+
+    //std::cout << "GS iterations: " << iter << std::endl;
+}
+
+
+void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter){
+
+    double norm = 1e10;
+    int row = 0;
+    double val = 0.0;
+    int iter = 0;
+    int x, y, g;
+
+    /* perform GS iteration */
+    while (norm > conv){
+
+	/* pass new flux to old flux */
+	vecCopy(vec_x, vec_x_old, cx*cy*ng);
+
+        #pragma omp parallel for private(val, row, x, y, g)
+	for (y = 0; y < cy; y++){
+	    for (x = y % 2; x < cx; x += 2){
+		for (g = 0; g < ng; g++){
+		    row = ((y*cx+x)*ng+g);
+		    val = 0.0;
+		    
+		    val += (1.0 - omega) * vec_x[row];
+
+		    /* source */
+		    val += omega * vec_b[row] / mat[row*(ng+4)+g+2];
+		    
+		    /* left surface */
+		    if (x != 0)
+			val -= omega * vec_x[(y*cx+x-1)*ng+g] * mat[row*(ng+4)] / mat[row*(ng+4)+g+2];
+		   	    
+		    /* bottom surface */
+		    if (y != cy - 1)
+			val -= omega * vec_x[((y+1)*cx+x)*ng+g] * mat[row*(ng+4)+1] / mat[row*(ng+4)+g+2];
+		    
+		    /* group to group */
+		    for (int e = 0; e < ng; e++){
+			if (e != g)
+			    val -= omega * vec_x[(y*cx+x)*ng+e] * mat[row*(ng+4)+2+e] / mat[row*(ng+4)+2+g];
+		    }
+		    
+		    /* right surface */
+		    if (x != cx - 1)
+			val -= omega * vec_x[(y*cx+x+1)*ng+g] * mat[row*(ng+4)+ng+2] / mat[row*(ng+4)+g+2];
+		    
+		    /* top surface */
+		    if (y != 0)
+			val -= omega * vec_x[((y-1)*cx+x)*ng+g] * mat[row*(ng+4)+ng+3] / mat[row*(ng+4)+g+2];
+		    
+		    vec_x[row] = val;
+		}
+	    }
+	}
+
+        #pragma omp parallel for private(val, row, x, y, g) 
+	for (y = 0; y < cy; y++){
+	    for (x = 1 - (y % 2); x < cx; x += 2){
+		for (g = 0; g < ng; g++){
 		    row = ((y*cx+x)*ng+g);
 		    val = 0.0;
 		    

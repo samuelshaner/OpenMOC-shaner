@@ -108,7 +108,7 @@ void Tcmfd::solveTCMFD(){
     matSubtract(_AM, _A, 1.0, _M, _cells_x, _cells_y, _num_groups);
     
     /* solve inverse system */
-    linearSolve(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cells_x, _cells_y, _num_groups, 10000);
+    linearSolveRB(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cells_x, _cells_y, _num_groups, 10000);
 }
 
 

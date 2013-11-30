@@ -109,7 +109,7 @@ double Cmfd::computeKeff(){
 	matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
 	
 	/* solve inverse system */
-	linearSolve(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cx, _cy, _ng, 10000);
+	linearSolveRB(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cx, _cy, _ng, 10000);
     }
     else{
 	if (method == 1){
@@ -130,7 +130,7 @@ double Cmfd::computeKeff(){
 		
 		/* Solver phi = A^-1 * old_source */
 		vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
-		linearSolve(_A, _phi_new, _b_prime, _phi_temp, conv, _omega, _cx, _cy, _ng, 1000);
+		linearSolveRB(_A, _phi_new, _b_prime, _phi_temp, conv, _omega, _cx, _cy, _ng, 1000);
 		
 		/* compute new source */
 		matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
@@ -169,8 +169,11 @@ double Cmfd::computeKeff(){
 	    
 	}
 	else{
+
+	    log_printf(INFO, "solving eigenvalue problem with wielandt shift method");
 	    
-	    int max_iter = 500;
+	    int max_iter = 100;
+	    double shift, offset;
 	    
 	    /* copy old flux to new */
 	    vecCopy(_phi_old, _phi_new, _nc);
@@ -188,15 +191,18 @@ double Cmfd::computeKeff(){
 	    
 	    vecCopy(_phi_new, _y, _nc);
 	    
-	    log_printf(NORMAL, "initial keff: %f", _k_eff);
+	    log_printf(INFO, "initial keff: %f", _k_eff);
 	    
-	    while (norm > _conv_criteria){
+	    shift = 1.5;
+
+	    /* loosely converge eigenvaue with shift of 1.5 */
+	    while (norm > 1e-5){
 		
 		/* reconstruct _AM */
-		matSubtract(_AM, _A, 1.0/_k_eff, _M, _cx, _cy, _ng);
+		matSubtract(_AM, _A, 1.0/shift, _M, _cx, _cy, _ng);
 		
 		/* solve inverse system */
-		linearSolve(_AM, _y, _snew, _phi_temp, conv, _omega, _cx, _cy, _ng, max_iter);
+		linearSolveRB(_AM, _y, _snew, _phi_temp, conv, _omega, _cx, _cy, _ng, max_iter);
 		
 		/* compute new _phi_new  */
 		vecCopy(_y, _phi_new, _nc);
@@ -223,7 +229,47 @@ double Cmfd::computeKeff(){
 		
 		iter++;
 		
-		log_printf(NORMAL, "iter: %i, _k_eff: %f, norm: %f", iter, _k_eff, norm); 
+		log_printf(INFO, "iter: %i, _k_eff: %f, norm: %f", iter, _k_eff, norm); 
+	    }
+
+	    offset = 0.05;
+	    log_printf(INFO, "setting offset to %f", offset);
+
+	    /* finely converge eigenvalue with constant offset */
+	    while (norm > _conv_criteria){
+		
+		/* reconstruct _AM */
+	    	matSubtract(_AM, _A, 1.0/(_k_eff + offset), _M, _cx, _cy, _ng);
+		
+		/* solve inverse system */
+	    	linearSolveRB(_AM, _y, _snew, _phi_temp, conv, _omega, _cx, _cy, _ng, max_iter);
+		
+		/* compute new _phi_new  */
+	    	vecCopy(_y, _phi_new, _nc);
+		vecScale(_phi_new, vecMax(_y, _nc), _nc);
+		matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
+		sumnew = vecSum(_snew, _nc);
+		scale_val = _nc / sumnew;
+		vecScale(_snew, scale_val, _nc);
+		vecScale(_phi_new, scale_val, _nc);
+		
+		/* compute new eigenvalue */
+		_k_eff = rayleighQuotient(_A, _M, _phi_new, _snew, _phi_temp, _cx, _cy, _ng);
+		
+		/* compute norm */
+		norm = 0.0;
+		for (int i = 0; i < _nc; i++)
+		    norm += pow(_snew[i] - _sold[i], 2);
+		
+		norm = pow(norm, 0.5);
+		norm = norm / _nc;
+		
+		/* copy new source to old */
+		vecCopy(_snew, _sold, _nc);
+		
+		iter++;
+		
+		log_printf(INFO, "iter: %i, _k_eff: %f, norm: %f", iter, _k_eff, norm); 
 	    }
 	}
     }
@@ -290,7 +336,22 @@ void Cmfd::constructMatrices(){
     Material** materials = _mesh->getMaterials();
     double* heights = _mesh->getLengthsY();
     double* widths = _mesh->getLengthsX();
+    double* volumes = _mesh->getVolumes();
+    double dt;
+    double* velocity;
+    double* frequency;
+    double* flux_new;
+    double* flux_old;
     
+
+    if (_mesh->getInitialState() == false){
+	dt = _mesh->getDtMOC();
+	velocity = _mesh->getVelocity();
+	frequency = _mesh->getFrequency();
+	flux_new = _mesh->getFluxes(FSR_OLD);
+	flux_old = _mesh->getFluxes(PREVIOUS_CONV);
+    }
+
     vecZero(_b, _nc);
     vecZero(_M, _ng*_nc);
     vecZero(_A, (_ng+4)*_nc);
@@ -307,30 +368,48 @@ void Cmfd::constructMatrices(){
 		
 		row = cell*_ng + e;
 
-		/* old flux and delayed neutron precursors */
 		if (_mesh->getInitialState() == false){
-		    _b[row] = _mesh->getFluxes(PREVIOUS_CONV)[cell*_ng + e] /
-			(_mesh->getVelocity()[e] * _mesh->getDtMOC()) * _mesh->getVolumes()[cell];
-		    //log_printf(NORMAL, "method c: %i, g: %i, dt: %f", cell, e, _mesh->getDtMOC()); 
 		    
+		    /* method source */
+		    if (_mesh->getTransientType() == ADIABATIC){
+
+			_b[row] = flux_old[row] / (velocity[e] * dt) * volumes[cell];
+
+			value = volumes[cell] / (velocity[e] * dt); 
+			_A[row*(_ng+4)+e+2] += value;
+		    }
+		    else if (_mesh->getTransientType() == IQS){
+
+			_b[row] = flux_new[row] / (velocity[e] * dt) * volumes[cell]; 
+
+			value = volumes[cell] / velocity[e] * (1.0 / dt + frequency[row]); 
+			_A[row*(_ng+4)+e+2] += value;
+		    }
+		    else if (_mesh->getTransientType() == OMEGA_MODE){
+
+			_b[row] = flux_old[row] / (velocity[e] * dt) *
+			    exp(frequency[row] * dt) * volumes[cell]; 
+			
+			value = volumes[cell] / (velocity[e] * dt) 
+			    * (1.0 + log(flux_new[row] / flux_old[row])); 
+			_A[row*(_ng+4)+e+2] += value;
+		    }
+
+		    /* delayed source */
 		    if (materials[cell]->getType() == FUNCTIONAL){
 			for (int dg = 0; dg < _mesh->getNumDelayGroups(); dg++){
 			    _b[row] += materials[cell]->getChi()[e] * _mesh->getVolumes()[cell] * 
 				_mesh->getLambda()[dg] * static_cast<FunctionalMaterial*>(materials[cell])->getPrecConc(CURRENT, dg);
 			}
 		    }	
+
+
 		}	
 				
 		/* absorption term */
 		value = materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
 		_A[row*(_ng+4)+e+2] += value;
 
-		/* flux derivative term */
-		if (_mesh->getInitialState() == false){
-		    value = _mesh->getVolumes()[cell] / (_mesh->getVelocity()[e] * _mesh->getDtMOC());
-		    _A[row*(_ng+4)+e+2] += value;
-		}
-		
 		/* out (1st) and in (2nd) scattering */
 		for (int g = 0; g < _ng; g++){
 		    if (e != g){

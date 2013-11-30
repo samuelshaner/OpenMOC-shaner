@@ -107,7 +107,7 @@ void TransientSolver::solveInitialState(){
 void TransientSolver::solveOuterStep(){
   
     /* set time integration parameters */
-    double tolerance_in = 1.e-6;
+    double tolerance_in = 1.e-7;
     double tolerance_out = 1.e-6;
     int length_conv = _power.size();
     double residual_out = 1.0;
@@ -115,6 +115,7 @@ void TransientSolver::solveOuterStep(){
     int iter = 0;
     double k_eff;
     double new_power;
+    double old_power = _power.back();
 
     if (_ts->getTime(CURRENT) == _start_time)
 	_timer->startTimer();
@@ -175,12 +176,12 @@ void TransientSolver::solveOuterStep(){
 		/* copy the coarse mesh flux from CURRENT to PREVIOUS */
 		_mesh->copyFlux(CURRENT, PREVIOUS);
 		copyFieldVariables(CURRENT, PREVIOUS);
-		
+	
 		/* compute and save the power, temp, and time */
 		_time.push_back(_ts->getTime(CURRENT));
 		_temp.push_back(computeCoreTemp());
 		_power.push_back(computePower() * _power_factor);
-		log_printf(NORMAL, "TIME: %f, POWER: %.12f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  		
+		log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  		
 	    }
 
 	    /* compute frequencies */
@@ -188,6 +189,8 @@ void TransientSolver::solveOuterStep(){
 
 	    /* compute new shape function and check for outer loop convergence */
 	    k_eff = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);
+	    old_power = _power.back();
+	    
 
 	    /* reset mesh amplitude to CURRENT state */
 	    _mesh->copyFlux(PREVIOUS, CURRENT);
@@ -550,16 +553,20 @@ void TransientSolver::updatePrecursorConc(){
     log_printf(INFO, "Updating precursor concentrations...");
     
     /* initialize variables */
-    double power, old_conc, new_conc;   
+    double power_new, power_old, old_conc, new_conc, k1, k2, k3;   
     
     if (_solve_method == MOC){
 	std::vector<int>::iterator iter;
-	double* fine_shape = _geom_mesh->getFluxes(CURRENT);
-	double* coarse_flux = _mesh->getFluxes(CURRENT);
+	double* fine_shape_new = _geom_mesh->getFluxes(CURRENT);
+	double* fine_shape_old = _geom_mesh->getFluxes(PREVIOUS);
+	double* coarse_flux_new = _mesh->getFluxes(CURRENT);
+	double* coarse_flux_old = _mesh->getFluxes(PREVIOUS);
 	double* volumes = _mesh->getVolumes();
 	double* velocity = _mesh->getVelocity();
 	Material** materials = _geom_mesh->getMaterials();
-	
+	double* lambda = _tcmfd->getLambda();
+	double* beta = _tcmfd->getBeta();
+
 	/* loop over coarse mesh cells */
 	for (int i = 0; i < _mesh->getNumCells(); i++){
 
@@ -569,19 +576,27 @@ void TransientSolver::updatePrecursorConc(){
 		/* loop over delayed groups */
 		for (int dg = 0; dg < _ndg; dg++){
 		    
-		    power = 0.0;
-		    
+		    power_old = 0.0;
+		    power_new = 0.0;
+
+		    /* compute ks */
+		    k1 = exp(- lambda[dg] * _dt_cmfd);
+		    k2 = 1.0 - (1.0 - k1) / (lambda[dg] * _dt_cmfd);
+		    k3 = k1  - (1.0 - k1) / (lambda[dg] * _dt_cmfd);
+
 		    /* compute power in fsr */
-		    for (int e = 0; e < _ng; e++)
-			power += materials[*iter]->getNuSigmaF()[e] * fine_shape[*iter*_ng+e] 
-			    * coarse_flux[i*_ng+e] * volumes[i] / velocity[e] / _k_eff_0;
-		    
+		    for (int e = 0; e < _ng; e++){
+			power_new += materials[*iter]->getNuSigmaF()[e] * fine_shape_new[*iter*_ng+e] 
+			    * coarse_flux_new[i*_ng+e] * volumes[i] / velocity[e] / _k_eff_0;
+			power_old += materials[*iter]->getNuSigmaF()[e] * fine_shape_old[*iter*_ng+e] 
+			    * coarse_flux_old[i*_ng+e] * volumes[i] / velocity[e] / _k_eff_0;
+		    }		    
+
 		    if (materials[*iter]->isFissionable()){
 			old_conc = static_cast<FunctionalMaterial*>(materials[*iter])->getPrecConc(PREVIOUS, dg);
-			new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
-			    + _tcmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
+			new_conc = k1 * old_conc + k2 * beta[dg] / lambda[dg] * power_new - k3 * beta[dg] / lambda[dg] * power_old;
 			
-			log_printf(DEBUG, "fsr: %i, old conc: %f, new conc: %f", *iter, old_conc, new_conc);
+			log_printf(DEBUG, "fsr: %i, old conc: %.12f, new conc: %.12f", *iter, old_conc, new_conc);
 			
 			static_cast<FunctionalMaterial*>(materials[*iter])->setPrecConc(CURRENT, new_conc, dg);
 		    }
@@ -592,24 +607,38 @@ void TransientSolver::updatePrecursorConc(){
 	mapPrecConc();
     }
     else{
-	double* flux = _mesh->getFluxes(CURRENT);
+	double* flux_new = _mesh->getFluxes(CURRENT);
+	double* flux_old = _mesh->getFluxes(PREVIOUS);
 	Material** materials = _mesh->getMaterials();
+	double* lambda = _tcmfd->getLambda();
+	double* beta = _tcmfd->getBeta();
 	
 	/* loop over mesh cells */
 	for (int i = 0; i < _mesh->getNumCells(); i++){
 	    
 	    for (int dg = 0; dg < _ndg; dg++){
 		
-		power = 0.0;
+		power_old = 0.0;
+		power_new = 0.0;
+
+		/* compute ks */
+		k1 = exp(- lambda[dg] * _dt_cmfd);
+		k2 = 1.0 - (1.0 - k1) / (lambda[dg] * _dt_cmfd);
+		k3 = k1  - (1.0 - k1) / (lambda[dg] * _dt_cmfd);
 		
 		/* compute power in fsr */
-		for (int e = 0; e < _ng; e++)
-		    power += materials[i]->getNuSigmaF()[e]*flux[i*_ng+e] / _k_eff_0;
+		for (int e = 0; e < _ng; e++){
+		    power_new += materials[i]->getNuSigmaF()[e]*flux_new[i*_ng+e] / _k_eff_0;
+		    power_old += materials[i]->getNuSigmaF()[e]*flux_old[i*_ng+e] / _k_eff_0;
 		
+		}
+
 		if (materials[i]->isFissionable()){
 		    old_conc = static_cast<FunctionalMaterial*>(materials[i])->getPrecConc(PREVIOUS, dg);
-		    new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
-			+ _tcmfd->getBeta()[dg]*_dt_cmfd*power/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
+		    new_conc = k1 * old_conc + k2 * beta[dg] / lambda[dg] * power_new - k3 * beta[dg] / lambda[dg] * power_old;
+
+		    //new_conc = old_conc / (1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd) 
+		    //	+ _tcmfd->getBeta()[dg]*_dt_cmfd*power_new/(1.0 + _tcmfd->getLambda()[dg]*_dt_cmfd);
 		    
 		    log_printf(DEBUG, "cell: %i, old conc: %f, new conc: %f", i, old_conc, new_conc);
 		    
