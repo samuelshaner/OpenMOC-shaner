@@ -610,7 +610,7 @@ void CPUSolver::flattenFSRFluxes(FP_PRECISION value) {
      source_residual = pairwise_sum<FP_PRECISION>(_source_residuals, 
 						  _num_FSRs*_num_groups);
      
-     source_residual = sqrt(source_residual) / _num_FSRs;
+     source_residual = sqrt(source_residual / (_num_FSRs * _num_groups));
 
      return source_residual;
  }
