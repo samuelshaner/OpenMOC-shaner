@@ -56,6 +56,7 @@ void matSubtract(double* AM, double* A, double omega, double* M, int cx, int cy,
     vecCopy(A, AM, cx*cy*ng*(ng+4));
     
     /* subtract omega*M from AM */
+    #pragma omp parallel for
     for (int i = 0; i < cx*cy*ng; i++){
 	for (int e = 0; e < ng; e++)
 	    AM[i*(ng+4)+e+2] -= omega*M[i*ng+e];		
@@ -76,6 +77,7 @@ double vecMax(double* vec, int length){
 
 void vecScale(double* vec, double scale_val, int length){
 
+    #pragma omp parallel for
     for (int i = 0; i < length; i++)
       vec[i] *= scale_val;
 }
@@ -83,6 +85,7 @@ void vecScale(double* vec, double scale_val, int length){
 
 void vecSet(double* vec, double val, int length){
 
+    #pragma omp parallel for
     for (int i = 0; i < length; i++)
 	vec[i] = val;
 }
@@ -90,6 +93,7 @@ void vecSet(double* vec, double val, int length){
 
 void vecSubtract(double* a, double* b, double* c, int ng){
 
+    #pragma omp parallel for 
     for (int i = 0; i < ng; i++)
 	c[i] = a[i] - b[i];
 
@@ -170,6 +174,7 @@ double vecSum(double* vec, int length){
 
 void vecCopy(double* vec_from, double* vec_to, int length){
 
+  #pragma omp parallel for
   for (int i = 0; i < length; i++)
     vec_to[i] = vec_from[i];
 }
@@ -177,13 +182,15 @@ void vecCopy(double* vec_from, double* vec_to, int length){
 
 void vecZero(double* vec, int length){
 
+  #pragma omp parallel for
   for (int i = 0; i < length; i++)
     vec[i] = 0.0;
 }
 
 
 void vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y, int length){
-    
+  
+    #pragma omp parallel for
     for (int i = 0; i < length; i++){
 	vec_w[i] = a * vec_x[i] + vec_y[i];
     }    
@@ -192,6 +199,7 @@ void vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y, int length)
 
 void vecWAXPY(float* vec_w, double a, double* vec_x, double* vec_y, int length){
     
+    #pragma omp parallel for
     for (int i = 0; i < length; i++){
 	vec_w[i] = a * vec_x[i] + vec_y[i];
     }    
@@ -274,7 +282,7 @@ void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old,
     int row = 0;
     double val = 0.0;
     int iter = 0;
-    int x, y, g;
+    int x, y, g, e;
 
     /* perform GS iteration */
     while (norm > conv){
@@ -282,7 +290,7 @@ void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old,
 	/* pass new flux to old flux */
 	vecCopy(vec_x, vec_x_old, cx*cy*ng);
 
-        #pragma omp parallel for private(val, row, x, y, g)
+        #pragma omp parallel for private(val, row, x, y, e, g)
 	for (y = 0; y < cy; y++){
 	    for (x = y % 2; x < cx; x += 2){
 		for (g = 0; g < ng; g++){
@@ -303,7 +311,7 @@ void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old,
 			val -= omega * vec_x[((y+1)*cx+x)*ng+g] * mat[row*(ng+4)+1] / mat[row*(ng+4)+g+2];
 		    
 		    /* group to group */
-		    for (int e = 0; e < ng; e++){
+		    for (e = 0; e < ng; e++){
 			if (e != g)
 			    val -= omega * vec_x[(y*cx+x)*ng+e] * mat[row*(ng+4)+2+e] / mat[row*(ng+4)+2+g];
 		    }
@@ -389,7 +397,7 @@ void dumpVector(double* vec, int length){
 
 void vecDivide(double* vec_w, double* vec_y, double* vec_x, int length){
 
-
+    #pragma omp parallel for
     for (int i = 0; i < length; i++){
 	if (vec_x[i] != 0.0)
 	    vec_w[i] = vec_y[i] / vec_x[i];

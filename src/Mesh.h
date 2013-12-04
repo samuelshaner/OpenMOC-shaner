@@ -20,6 +20,7 @@
 #include "Surface.h"
 #include "FunctionalMaterial.h"
 #include "Quadrature.h"
+#include "TimeStepper.h"
 
 /**
  * Solve types
@@ -47,6 +48,7 @@ private:
 
   /* pointer to quadrature object */
   Quadrature* _quad;
+  TimeStepper* _ts;
 
   /* cmfd level */
   int _mesh_level;
@@ -89,7 +91,7 @@ private:
 
   /* map of fluxes mapped onto mesh */
   std::map<materialState, double*> _fluxes;
-  double* _frequency;
+  std::map<materialState, double*> _frequency;
 
   /* map of fsrs to cells */
   int* _FSRs_to_cells;
@@ -153,6 +155,7 @@ public:
   Material** getMaterials();
   double* getVolumes();
   double* getFluxes(materialState state);
+  double* getFrequencies(materialState state);
   double* getLengthsX();
   double* getLengthsY();
   double* getCurrents();
@@ -197,7 +200,9 @@ public:
   void initializeMaterials(std::map<int, Material*>* materials, int* fsrs_to_mats);
   void initializeSurfaceCurrents();
   void createNewFlux(materialState state);
+  void createNewFrequency(materialState state);
   void copyFlux(materialState from_state, materialState to_state);
+  void copyFrequency(materialState from_state, materialState to_state);
   void copyDs(materialState from_state, materialState to_state);
   void dumpFlux(materialState state);
   void dumpXS();
@@ -240,7 +245,8 @@ public:
   void normalizeDs(double scale_val);
   void zeroDs();
 
-  double* getFrequency();
+  void setTimeStepper(TimeStepper* ts);
+  TimeStepper* getTimeStepper();
 };
 
 #endif /* MESH_H_ */

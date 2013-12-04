@@ -17,7 +17,7 @@ Mesh::Mesh(solveType solve_type, bool cmfd_on, double relax_factor, int mesh_lev
 
   if (solve_type == DIFFUSION)
     cmfd_on = true;
-
+  
   /* initialize variables */
   _cmfd_on = cmfd_on;
   _acceleration = cmfd_on;
@@ -32,6 +32,7 @@ Mesh::Mesh(solveType solve_type, bool cmfd_on, double relax_factor, int mesh_lev
   _relax_factor = relax_factor;
   _solve_method = solve_type;
   _quad = new Quadrature(TABUCHI);
+  _ts = NULL;
 
   /* initialize boundaries to be reflective */
   _boundaries = new boundaryType[4];
@@ -95,9 +96,14 @@ void Mesh::initialize(){
 
     /* allocate memory for FSRs to cells map */
     _FSRs_to_cells = new int[_num_fsrs];
-
-    _frequency = new double[_cells_x*_cells_y*_num_groups];
     
+    double* freq_cur;
+    double* freq_pre;
+    freq_cur = new double[_cells_x*_cells_y*_num_groups];
+    freq_pre = new double[_cells_x*_cells_y*_num_groups];
+    _frequency.insert(std::pair<materialState, double*>(PREVIOUS, freq_cur));
+    _frequency.insert(std::pair<materialState, double*>(CURRENT, freq_pre));
+
     /* allocate memory for fluxes */
     double* flux_fsr;
     double* flux_cur;
@@ -120,7 +126,8 @@ void Mesh::initialize(){
 	    for (int g = 0; g < _num_groups; g++){
 	        flux_fsr[(y*_cells_x+x)*_num_groups + g] = 1.0;
 	        flux_cur[(y*_cells_x+x)*_num_groups + g] = 1.0;
-		_frequency[(y*_cells_x+x)*_num_groups + g] = 0.0;
+		freq_cur[(y*_cells_x+x)*_num_groups + g] = 0.0;
+		freq_pre[(y*_cells_x+x)*_num_groups + g] = 0.0;
 	    }
 
 	    /* allocate memory for fsr vector */
@@ -159,6 +166,7 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
     Material* cell_material;
    
     /* loop over mesh cells */
+#pragma omp parallel for private(volume, flux, abs, tot, nu_fis, chi, dif_coef, scat, abs_tally, nu_fis_tally, dif_tally, rxn_tally, vol_tally, tot_tally, scat_tally, iter, fsr_material, cell_material)
     for (int i = 0; i < _cells_x * _cells_y; i++){
 	
 	/* loop over energy groups */
@@ -450,6 +458,7 @@ void Mesh::updateMOCFlux(){
     double old_cell_flux, new_cell_flux;
     
     /* loop over mesh cells */
+    #pragma omp parallel for private(iter, old_cell_flux, new_cell_flux)
     for (int i = 0; i < _cells_x*_cells_y; i++){
 	
 	/* loop over groups */
@@ -549,6 +558,7 @@ void Mesh::computeFineShape(double* geom_shape, double* mesh_flux){
     int ng = _num_groups;
 
     /* set volume of mesh cells */
+    #pragma omp parallel for private(cell, iter)
     for (int y = 0; y < _cells_y; y++){
 	for (int x = 0; x < _cells_x; x++){
 	    cell = y*_cells_x+x;
@@ -570,6 +580,7 @@ void Mesh::reconstructFineFlux(double* geom_shape, double* geom_flux, double* me
     int ng = _num_groups;
     
     /* set volume of mesh cells */
+    #pragma omp parallel for private(iter, cell)
     for (int i = 0; i < _cells_y*_cells_x; i++){
 	for (iter = _cell_fsrs.at(i).begin(); iter != _cell_fsrs.at(i).end(); ++iter){
 	    for (int g = 0; g < ng; g++){
@@ -1453,6 +1464,12 @@ void Mesh::createNewFlux(materialState state){
 }
 
 
+void Mesh::createNewFrequency(materialState state){
+  double* frequency = new double[_cells_x*_cells_y*_num_groups];
+  _frequency.insert(std::pair<materialState, double*>(state, frequency));
+}
+
+
 void Mesh::copyFlux(materialState from_state, materialState to_state){
 
     if (from_state != FSR && to_state != FSR){
@@ -1472,6 +1489,15 @@ void Mesh::copyFlux(materialState from_state, materialState to_state){
 	    to_flux[i] = _FSR_fluxes[i];
 	}
     }
+}
+
+
+void Mesh::copyFrequency(materialState from_state, materialState to_state){
+
+  double* from_flux = _frequency.at(from_state);
+  double* to_flux = _frequency.at(to_state);
+  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
+    to_flux[i] = from_flux[i];
 }
 
 
@@ -1692,6 +1718,7 @@ void Mesh::interpolateFlux(double ratio){
     double* cur_flux = getFluxes(CURRENT);
     double slope;
 
+    #pragma omp parallel for private(slope)
     for (int i = 0; i < _num_groups*_cells_x*_cells_y; i++){
 	slope = fwd_flux[i] - pre_flux[i];
 	cur_flux[i] = pre_flux[i] + ratio * slope;
@@ -1703,6 +1730,7 @@ void Mesh::normalizeFlux(double scale_val){
 
     double* flux = getFluxes(CURRENT);
 
+    #pragma omp parallel for
     for (int i = 0; i < _num_groups*_cells_x*_cells_y; i++)
 	flux[i] *= scale_val;
 }
@@ -1724,6 +1752,7 @@ void Mesh::zeroDs(){
 
     int ngs = 4*_num_groups;
 
+    #pragma omp parallel for
     for (int i = 0; i < _cells_x*_cells_y; i++){
 	for (int gs = 0; gs < ngs; gs++)
 	    _materials[i]->getDifTilde()[int(FORWARD)*ngs+gs] = 0.0;
@@ -1731,6 +1760,17 @@ void Mesh::zeroDs(){
 }
 
 
-double* Mesh::getFrequency(){
-    return _frequency;
+double* Mesh::getFrequencies(materialState state){
+  return _frequency.at(state);
 }
+
+
+void Mesh::setTimeStepper(TimeStepper* time_stepper){
+    _ts = time_stepper; 
+}
+
+
+TimeStepper* Mesh::getTimeStepper(){
+    return _ts;
+}
+

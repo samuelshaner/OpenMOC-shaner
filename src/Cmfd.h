@@ -27,6 +27,7 @@
 #include "Geometry.h"
 #include "Timer.h"
 #include "linalg_functions.h"
+#include <omp.h>
 #endif
 
 class Cmfd {

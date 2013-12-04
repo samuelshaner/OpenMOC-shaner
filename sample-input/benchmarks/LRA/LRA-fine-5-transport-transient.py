@@ -226,7 +226,7 @@ transientSolver.setDtCMFD(dt_cmfd)
 transientSolver.setStartTime(0.0)
 transientSolver.setEndTime(3.0)
 transientSolver.setNumDelayGroups(2)
-transientSolver.setTransientMethod('IQS')
+transientSolver.setTransientMethod('ADIABATIC')
 transientSolver.setPowerInit(1.e-6)
 
 transientSolver.solveInitialState()

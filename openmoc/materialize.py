@@ -45,7 +45,6 @@ def materialize(filename):
                           filename)
     
         num_groups = f.attrs['Energy Groups']
-
         # Check that the number of energy groups is an integer
         if not isinstance(num_groups, int):
             py_printf('ERROR', 'Unable to materialize file %s since the ' + \

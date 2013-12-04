@@ -15,6 +15,7 @@
 #include <omp.h>
 #include <stdlib.h>
 #include "CPUSolver.h"
+#include "TimeStepper.h"
 #endif
 
 /** Indexing scheme for the thread private scalar flux for each thread in

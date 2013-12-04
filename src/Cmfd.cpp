@@ -104,12 +104,9 @@ double Cmfd::computeKeff(){
     constructMatrices();
 
     if (_mesh->getInitialState() == false){
+      matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
+      linearSolveRB(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cx, _cy, _ng, 10000);
 
-	/* reconstruct _AM */
-	matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
-	
-	/* solve inverse system */
-	linearSolveRB(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cx, _cy, _ng, 10000);
     }
     else{
 	if (method == 1){
@@ -331,25 +328,31 @@ void Cmfd::constructMatrices(){
     int cell;
     int row;
     int offset = int(FORWARD)*4*_ng;
+    int e, g, dg;
     
     /* get arrays */
     Material** materials = _mesh->getMaterials();
+    Material* material;
     double* heights = _mesh->getLengthsY();
     double* widths = _mesh->getLengthsX();
     double* volumes = _mesh->getVolumes();
     double dt;
     double* velocity;
-    double* frequency;
+    double* frequency_new;
+    double* frequency_old;
     double* flux_new;
     double* flux_old;
+    TimeStepper* ts;
     
 
     if (_mesh->getInitialState() == false){
 	dt = _mesh->getDtMOC();
 	velocity = _mesh->getVelocity();
-	frequency = _mesh->getFrequency();
+	frequency_new = _mesh->getFrequencies(CURRENT);
+	frequency_old = _mesh->getFrequencies(PREVIOUS);
 	flux_new = _mesh->getFluxes(FSR_OLD);
 	flux_old = _mesh->getFluxes(PREVIOUS_CONV);
+	ts = _mesh->getTimeStepper();
     }
 
     vecZero(_b, _nc);
@@ -358,13 +361,15 @@ void Cmfd::constructMatrices(){
     vecZero(_AM, (_ng+4)*_nc);
     
     /* loop over cells */
+    #pragma(cell, row, value, material)
     for (int y = 0; y < _cy; y++){
 	for (int x = 0; x < _cx; x++){
 	    
 	    cell = y*_cx + x;
-	    
+	    material = materials[cell];
+
 	    /* loop over groups */
-	    for (int e = 0; e < _ng; e++){
+	    for (e = 0; e < _ng; e++){
 		
 		row = cell*_ng + e;
 
@@ -380,42 +385,46 @@ void Cmfd::constructMatrices(){
 		    }
 		    else if (_mesh->getTransientType() == IQS){
 
-			_b[row] = flux_new[row] / (velocity[e] * dt) * volumes[cell]; 
+			_b[row] = _mesh->getFluxes(PREVIOUS)[row] 
+			  / (velocity[e] * dt) * volumes[cell]; 
 
-			value = volumes[cell] / velocity[e] * (1.0 / dt + frequency[row]); 
+			value = volumes[cell] / velocity[e] * (1.0 / dt + frequency_new[row]); 
 			_A[row*(_ng+4)+e+2] += value;
 		    }
 		    else if (_mesh->getTransientType() == OMEGA_MODE){
 
 			_b[row] = flux_old[row] / (velocity[e] * dt) *
-			    exp(frequency[row] * dt) * volumes[cell]; 
-			
+			  exp(frequency_new[row] * dt) 
+			  * volumes[cell]; 
+	
 			value = volumes[cell] / (velocity[e] * dt) 
-			    * (1.0 + log(flux_new[row] / flux_old[row])); 
+			    * (1.0 + log(_mesh->getFluxes(PREVIOUS)[row] / flux_old[row])); 
 			_A[row*(_ng+4)+e+2] += value;
+
+			// value = volumes[cell] / (velocity[e] * dt) 
+			//  * (1.0 + log(flux_new[row] / flux_old[row])); 
+			//_A[row*(_ng+4)+e+2] += value;
 		    }
 
 		    /* delayed source */
-		    if (materials[cell]->getType() == FUNCTIONAL){
-			for (int dg = 0; dg < _mesh->getNumDelayGroups(); dg++){
-			    _b[row] += materials[cell]->getChi()[e] * _mesh->getVolumes()[cell] * 
-				_mesh->getLambda()[dg] * static_cast<FunctionalMaterial*>(materials[cell])->getPrecConc(CURRENT, dg);
+		    if (material->getType() == FUNCTIONAL){
+			for (dg = 0; dg < _mesh->getNumDelayGroups(); dg++){
+			    _b[row] += material->getChi()[e] * _mesh->getVolumes()[cell] * 
+				_mesh->getLambda()[dg] * static_cast<FunctionalMaterial*>(material)->getPrecConc(CURRENT, dg);
 			}
 		    }	
-
-
 		}	
 				
 		/* absorption term */
-		value = materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
+		value = material->getSigmaA()[e] * _mesh->getVolumes()[cell];
 		_A[row*(_ng+4)+e+2] += value;
 
 		/* out (1st) and in (2nd) scattering */
-		for (int g = 0; g < _ng; g++){
+		for (g = 0; g < _ng; g++){
 		    if (e != g){
-			value = materials[cell]->getSigmaS()[g*_ng+e] * _mesh->getVolumes()[cell]; 
+			value = material->getSigmaS()[g*_ng+e] * _mesh->getVolumes()[cell]; 
 			_A[row*(_ng+4)+e+2] += value;
-			value = - materials[cell]->getSigmaS()[e*_ng + g] * _mesh->getVolumes()[cell];
+			value = - material->getSigmaS()[e*_ng + g] * _mesh->getVolumes()[cell];
 			_A[row*(_ng+4)+g+2] += value;
 		    }
 		}
@@ -424,8 +433,8 @@ void Cmfd::constructMatrices(){
 		
 		/* set transport term on diagonal */
 		
-		value = (materials[cell]->getDifHat()[2*_ng + e] 
-			 - materials[cell]->getDifTilde()[offset + 2*_ng + e]) 
+		value = (material->getDifHat()[2*_ng + e] 
+			 - material->getDifTilde()[offset + 2*_ng + e]) 
 		    * heights[cell / _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
@@ -433,8 +442,8 @@ void Cmfd::constructMatrices(){
 		
 		/* set transport term on off diagonal */
 		if (x != _cx - 1){
-		    value = - (materials[cell]->getDifHat()[2*_ng + e] 
-			       + materials[cell]->getDifTilde()[offset + 2*_ng + e]) 
+		    value = - (material->getDifHat()[2*_ng + e] 
+			       + material->getDifTilde()[offset + 2*_ng + e]) 
 			* heights[cell / _cx];
 		    
 		    _A[row*(_ng+4)+_ng+2] += value; 
@@ -443,16 +452,16 @@ void Cmfd::constructMatrices(){
 		/* LEFT SURFACE */
 		
 		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[0*_ng + e] 
-			 + materials[cell]->getDifTilde()[offset + 0*_ng + e]) 
+		value = (material->getDifHat()[0*_ng + e] 
+			 + material->getDifTilde()[offset + 0*_ng + e]) 
 		    * heights[cell / _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
 		
 		/* set transport term on off diagonal */
 		if (x != 0){
-		    value = - (materials[cell]->getDifHat()[0*_ng + e] 
-			       - materials[cell]->getDifTilde()[offset + 0*_ng + e]) 
+		    value = - (material->getDifHat()[0*_ng + e] 
+			       - material->getDifTilde()[offset + 0*_ng + e]) 
 			* heights[cell / _cx];
 		    
 		    _A[row*(_ng+4)] += value; 
@@ -461,16 +470,16 @@ void Cmfd::constructMatrices(){
 		/* BOTTOM SURFACE */
 		
 		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[1*_ng + e] 
-			 - materials[cell]->getDifTilde()[offset + 1*_ng + e]) 
+		value = (material->getDifHat()[1*_ng + e] 
+			 - material->getDifTilde()[offset + 1*_ng + e]) 
 		    * widths[cell % _cx];
 		
 		_A[row*(_ng+4)+e+2] += value;        
 		
 		/* set transport term on off diagonal */
 		if (y != _cy - 1){
-		    value = - (materials[cell]->getDifHat()[1*_ng + e] 
-			       + materials[cell]->getDifTilde()[offset + 1*_ng + e]) 
+		    value = - (material->getDifHat()[1*_ng + e] 
+			       + material->getDifTilde()[offset + 1*_ng + e]) 
 			* widths[cell % _cx];
 		    
 		    _A[row*(_ng+4)+1] += value; 
@@ -479,29 +488,29 @@ void Cmfd::constructMatrices(){
 		/* TOP SURFACE */
 		
 		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[3*_ng + e] 
-			 + materials[cell]->getDifTilde()[offset + 3*_ng + e]) 
+		value = (material->getDifHat()[3*_ng + e] 
+			 + material->getDifTilde()[offset + 3*_ng + e]) 
 		    * widths[cell % _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
 		
 		/* set transport term on off diagonal */
 		if (y != 0){
-		    value = - (materials[cell]->getDifHat()[3*_ng + e] 
-			       - materials[cell]->getDifTilde()[offset + 3*_ng + e]) 
+		    value = - (material->getDifHat()[3*_ng + e] 
+			       - material->getDifTilde()[offset + 3*_ng + e]) 
 			* widths[cell % _cx];
 		    
 		    _A[row*(_ng+4)+_ng+3] += value; 
 		}
 		
 		/* fission source */
-		for (int g = 0; g < _ng; g++){	    
+		for (g = 0; g < _ng; g++){	    
 		    if (_mesh->getInitialState() == true){
-			value = materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] *  _mesh->getVolumes()[cell];	   
+			value = material->getChi()[e] * material->getNuSigmaF()[g] *  _mesh->getVolumes()[cell];	   
 		    }
 		    else{
 			value = (1.0 - _mesh->getBetaSum()) / _mesh->getKeff0() * 
-			    materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * 
+			    material->getChi()[e] * material->getNuSigmaF()[g] * 
 			    _mesh->getVolumes()[cell];	    
 		    }
 		    
@@ -510,7 +519,7 @@ void Cmfd::constructMatrices(){
 	    }
 	}
     }
-    
+
     log_printf(INFO,"Done constructing matrices...");  
     
 }

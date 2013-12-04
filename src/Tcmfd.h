@@ -69,8 +69,7 @@ protected:
 public:
   Tcmfd(Geometry* geometry, double criteria=1e-8);
   virtual ~Tcmfd();
-  void constructMatrices();
-  void constructJacobian();
+  void constructMatrices(bool frequency=false);
   void solveTCMFD();
   void setTransientType(transientType trans_type);
   void setKeff0(double keff_0);

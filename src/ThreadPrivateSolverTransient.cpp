@@ -121,6 +121,8 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 
     log_printf(INFO, "converging transient source");
 
+    //zeroTrackFluxes();
+
     /* Counter for the number of iterations to converge the source */
     _num_iterations = 0;
 
@@ -234,9 +236,11 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
     double* coarse_flux_old = mesh->getFluxes(PREVIOUS_CONV);
     double* volumes = mesh->getVolumes();
     double* velocity = mesh->getVelocity();
-    double* frequency = mesh->getFrequency();
-    double old_flux;
+    double* frequency_new = mesh->getFrequencies(CURRENT);
+    double* frequency_old = mesh->getFrequencies(PREVIOUS);
+    double old_flux, new_flux;
     double dt = mesh->getDtMOC();
+    TimeStepper* ts = mesh->getTimeStepper();
     
     /* loop over coarse mesh cells */
     for (int i = 0; i < mesh->getNumCells(); i++){
@@ -283,6 +287,9 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 		    method_source = 0.0;
 		    old_flux = fine_shape[r*_num_groups+G] * coarse_flux_old[i*_num_groups+G] 
 			* volumes[i] / velocity[G];
+		    new_flux = fine_shape[r*_num_groups+G] * coarse_flux_new[i*_num_groups+G] 
+			* volumes[i] / velocity[G];
+
 		    if (mesh->getTransientType() == ADIABATIC){
 			method_source = 1.0/(velocity[G] * dt) * 
 			    (old_flux - _scalar_flux(r,G));	
@@ -291,12 +298,12 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 			method_source = 1.0/(velocity[G]) * 
 			    (old_flux * coarse_flux_new[i*_num_groups+G] 
 			    / coarse_flux_old[i*_num_groups+G] / dt 
-			     - _scalar_flux(r,G) * (1.0 / dt + frequency[i*_num_groups+G]));
+			     - _scalar_flux(r,G) * (1.0 / dt + frequency_new[i*_num_groups+G]));
 		    }
 		    else if (mesh->getTransientType() == OMEGA_MODE){
 	                method_source = 1.0/(velocity[G] * dt) * 
-			    (old_flux * exp(frequency[i*_num_groups+G] * dt) 
-			     - _scalar_flux(r,G) * (1.0 + log(_scalar_flux[r,G] / old_flux)));
+			  (old_flux * exp(frequency_new[i*_num_groups+G] * dt) 
+			   - _scalar_flux(r,G) * (1.0 + log(new_flux / old_flux)));
 		    }
 		    else{
 	                log_printf(ERROR, "To solve a transient problem you must " 
@@ -830,9 +837,12 @@ void ThreadPrivateSolverTransient::normalizeBoundaryFluxes(){
     double* coarse_flux_old = mesh->getFluxes(PREVIOUS_CONV);
     double* volumes = mesh->getVolumes();
     double* velocity = mesh->getVelocity();
-    double* frequency = mesh->getFrequency();
     double old_flux;
     double dt = mesh->getDtMOC();
+    double* frequency_new = mesh->getFrequencies(CURRENT);
+    double* frequency_old = mesh->getFrequencies(PREVIOUS);
+    TimeStepper* ts = mesh->getTimeStepper();
+    
     
     /* loop over coarse mesh cells */
     for (int i = 0; i < mesh->getNumCells(); i++){
@@ -855,6 +865,9 @@ void ThreadPrivateSolverTransient::normalizeBoundaryFluxes(){
 	    
 	    fission_source = pairwise_sum<FP_PRECISION>(&_fission_sources(r,0), 
 							_num_groups);
+
+	    for (int e=0; e < _num_groups; e++)
+		_fission_sources(r,e) = _scalar_flux(r,e) * nu_sigma_f[e] * volume;
 	    
 	    /* Compute total scattering source for group G */
 	    for (int G=0; G < _num_groups; G++) {
@@ -876,6 +889,7 @@ void ThreadPrivateSolverTransient::normalizeBoundaryFluxes(){
 				static_cast<FunctionalMaterial*>(material)->getPrecConc(CURRENT, dg);
 		    }
 
+
 		    /* method source */
 		    method_source = 0.0;
 		    old_flux = fine_shape[r*_num_groups+G] * coarse_flux_old[i*_num_groups+G] 
@@ -888,18 +902,20 @@ void ThreadPrivateSolverTransient::normalizeBoundaryFluxes(){
 			method_source = 1.0/(velocity[G]) * 
 			    (old_flux * coarse_flux_new[i*_num_groups+G] 
 			    / coarse_flux_old[i*_num_groups+G] / dt 
-			     - _scalar_flux(r,G) * (1.0 / dt + frequency[i*_num_groups+G]));
+			     - _scalar_flux(r,G) * (1.0 / dt + frequency_new[i*_num_groups+G]));
 		    }
 		    else if (mesh->getTransientType() == OMEGA_MODE){
 	                method_source = 1.0/(velocity[G] * dt) * 
-			    (old_flux * exp(frequency[i*_num_groups+G] * dt) 
+			  (old_flux * exp(frequency_new[i*_num_groups+G] *
+			  ts->getTime(CURRENT) - frequency_old[i*_num_groups+G] * 
+			  ts->getTime(PREVIOUS)) 
 			     - _scalar_flux(r,G) * (1.0 + log(_scalar_flux[r,G] / old_flux)));
 		    }
 		    else{
 	                log_printf(ERROR, "To solve a transient problem you must " 
 	                                  "give a transient method!");
                     }
-		    
+
 		    /* Set the total source for region r in group G */
 		    _source(r,G) = ((1.0 - mesh->getBetaSum()) * (1.0 / mesh->getKeff0()) 
 				    * fission_source * chi[G] + chi[G] 
@@ -922,7 +938,7 @@ void ThreadPrivateSolverTransient::normalizeBoundaryFluxes(){
 	}
     }
 
-    total_source = pairwise_sum<FP_PRECISION>(_source, _num_FSRs*_num_groups);
+    total_source = pairwise_sum<FP_PRECISION>(_fission_sources, _num_FSRs*_num_groups);
     
     norm_factor = 1.0 / total_source;
     

@@ -179,11 +179,13 @@ void FunctionalMaterial::sigmaAFuncTime(bool func_time){
 void FunctionalMaterial::sync(materialState state){
   
     double sigma_t_tot;
+    double sigma_s_out;
     
   /* SIGMA_A */
   for (int g = 0; g < _num_groups; g++){
     
       sigma_t_tot = 0.0;
+      sigma_s_out = 0.0;
 
     if (_sigma_a_func_time)
       _sigma_a[g] = interpolateXS(_sigma_a_ref, state, g);
@@ -196,12 +198,13 @@ void FunctionalMaterial::sync(materialState state){
     if (_buckling != NULL && _dif_coef != NULL)
 	_sigma_a[g] += _buckling[g] * _dif_coef[g];
 
-    for (int G = 0; G < _num_groups; G++)
-	sigma_t_tot += _sigma_s[G*_num_groups + g];
+    /* adjust self scattering to conserve total xs */
+    for (int G = 0; G < _num_groups; G++){
+        if (G != g)
+	    sigma_s_out += _sigma_s[G*_num_groups + g];
+    }
 
-    sigma_t_tot += _sigma_a[g];
-
-    _sigma_t[g] = sigma_t_tot;
+    _sigma_s[g*_num_groups + g] = _sigma_t[g] - _sigma_a[g] - sigma_s_out;
 
   }
 }

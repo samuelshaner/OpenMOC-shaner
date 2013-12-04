@@ -8,7 +8,7 @@ import openmoc.materialize as materialize
 ###############################################################################
 
 log.setLogLevel('NORMAL')
-dt_cmfd = 1e-3;
+dt_cmfd = 1e-4;
 
 ###############################################################################
 ###########################   Creating Materials   ############################
@@ -231,10 +231,10 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd...')
 
 cmfd  = Cmfd(geometry)
-cmfd.setOmega(1.75)
+cmfd.setOmega(1.5)
 
 tcmfd = Tcmfd(geometry)
-tcmfd.setOmega(1.75)
+tcmfd.setOmega(1.5)
 tcmfd.setLambda([0.0654, 1.35])
 tcmfd.setBeta([0.0054, 0.001087])
 tcmfd.setVelocity([3e7, 3e5])

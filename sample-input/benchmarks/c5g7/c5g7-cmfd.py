@@ -17,7 +17,7 @@ relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
 
-log.setLogLevel('NORMAL')
+log.setLogLevel('INFO')
 
 log.py_printf('TITLE', 'Simulating the OECD\'s C5G7 Benchmark Problem...')
 
@@ -340,7 +340,7 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd module...')
 
 cmfd = Cmfd(geometry)
-cmfd.setOmega(1.75)
+cmfd.setOmega(1.0)
 
 ###############################################################################
 ########################   Creating the TrackGenerator   ######################

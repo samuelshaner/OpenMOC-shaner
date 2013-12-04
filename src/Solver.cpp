@@ -591,7 +591,7 @@ void Solver::initializeCmfd(){
     _cmfd->getMesh()->setFSRMaterials(_FSR_materials);
     _cmfd->getMesh()->setFSRFluxes(_scalar_flux);
     _cmfd->getMesh()->setSurfaceCurrents(_surface_currents);
-
+    
     _geometry->getGeomMesh()->initialize();
     _geometry->getGeomMesh()->geomSetMaterials(_FSR_materials);
     _geometry->getGeomMesh()->geomSetVolumes(_FSR_volumes);

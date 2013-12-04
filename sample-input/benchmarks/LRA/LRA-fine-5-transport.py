@@ -202,7 +202,7 @@ log.py_printf('NORMAL', 'Creating transient solver...')
 solver = ThreadPrivateSolver(geometry, track_generator, cmfd)
 solver.setNumThreads(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
-solver.convergeSource(max_iters)
+solver.convergeSource(10000)
 solver.printTimerReport()
 
 ###############################################################################

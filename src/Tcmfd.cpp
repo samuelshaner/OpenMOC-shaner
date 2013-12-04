@@ -7,7 +7,7 @@
  *  shaner@mit.edu
  */
 
-#include "TCmfd.h"
+#include "Tcmfd.h"
 
 /**
  * Tcmfd constructor
@@ -33,7 +33,7 @@ Tcmfd::Tcmfd(Geometry* geometry, double criteria){
     _conv_criteria = criteria;
     _k_eff_0       = 1.0;
     _beta_sum      = 0.0;
-    _dt_cmfd       = 1e-4;
+    _dt_cmfd       = 1e-8;
 
     /* Boolean and Enum flags to toggle features */
     _solve_method = _mesh->getSolveType();
@@ -119,7 +119,7 @@ void Tcmfd::solveTCMFD(){
  * @param solve methed - either DIFFUSION or CMFD
  * @return petsc error indicator
  */
-void Tcmfd::constructMatrices(){
+void Tcmfd::constructMatrices(bool frequency){
     log_printf(INFO,"Constructing cmfd transient matrices transient...");
     
     /* initialized variables */
@@ -137,6 +137,7 @@ void Tcmfd::constructMatrices(){
     vecZero(_A, (_num_groups+4)*_nc);
 
     /* loop over mesh cells in y direction */
+    #pragma(row, value, cell)
     for (int y = 0; y < _cells_y; y++){
     
 	/* loop over mesh cells in x direction */
@@ -150,7 +151,8 @@ void Tcmfd::constructMatrices(){
 		row = cell*_num_groups+e;
 		
 		/* old flux and delayed neutron precursors */
-		_b[row] = _phi_old[cell*_num_groups + e] / (_velocity[e] * _dt_cmfd) * _mesh->getVolumes()[cell];
+		if (!frequency)
+		  _b[row] = _phi_old[cell*_num_groups + e] / (_velocity[e] * _dt_cmfd) * _mesh->getVolumes()[cell];
 
 		if (materials[cell]->getType() == FUNCTIONAL){
 		    for (int dg = 0; dg < _num_delay_groups; dg++){
@@ -164,7 +166,9 @@ void Tcmfd::constructMatrices(){
 		
 		/* flux derivative term */
 		value = _mesh->getVolumes()[cell] / (_velocity[e] * _dt_cmfd);
-		_A[row*(_num_groups+4)+e+2] += value;
+		
+		if (!frequency)
+		  _A[row*(_num_groups+4)+e+2] += value;
 		
 		/* scattering terms */
 		for (int g = 0; g < _num_groups; g++){
@@ -311,7 +315,6 @@ void Tcmfd::setBeta(double* beta, int num_delay_groups){
   for (int g = 0; g < num_delay_groups; g++){
     _beta[g] = beta[g];
     _beta_sum += beta[g];
-    log_printf(NORMAL, "g: %i, beta: %f, beta_sum: %f", g, beta[g], _beta_sum);
   }  
 
     _mesh->setBeta(beta, num_delay_groups);
@@ -416,13 +419,15 @@ void Tcmfd::checkNeutronBalance2(){
 
 void Tcmfd::computeFrequency(){
 
-    double* frequency = _mesh->getFrequency();
+    double* frequency = _mesh->getFrequencies(CURRENT);
+    double* volumes = _mesh->getVolumes();
 
     vecZero(frequency, _nc);
 
-    constructJacobian();
-
+    constructMatrices(true);
+    
     _phi_new = _mesh->getFluxes(CURRENT);
+    _phi_old = _mesh->getFluxes(PREVIOUS_CONV);
     
     matSubtract(_AM, _A, 1.0, _M, _cells_x, _cells_y, _num_groups);
 
@@ -435,155 +440,9 @@ void Tcmfd::computeFrequency(){
     vecDivide(frequency, frequency, _phi_new, _nc);
     
     for (int i = 0; i < _cells_x*_cells_y; i++){
-	for (int g = 0; g < _num_groups; g++)
-	    frequency[i*_num_groups+g] = frequency[i*_num_groups+g] / _velocity[g];
+      for (int g = 0; g < _num_groups; g++){
+	    frequency[i*_num_groups+g] = frequency[i*_num_groups+g] * _velocity[g] / volumes[i];
+	    log_printf(DEBUG, "c: %i, g: %i, freq1: %.10f, freq2: %.10f", i, g, frequency[i*_num_groups + g], 1.0 / _mesh->getDtMOC() * log(_phi_new[i*_num_groups+g] / _phi_old[i*_num_groups+g]));
+      }
     }
-}
-
-
-/* Fill in the values in the A matrix, M matrix, and phi_old vector
- * @param A matrix
- * @param M matrix
- * @param old flux vector
- * @param solve methed - either DIFFUSION or CMFD
- * @return petsc error indicator
- */
-void Tcmfd::constructJacobian(){
-    log_printf(INFO,"Constructing cmfd transient matrices transient...");
-    
-    /* initialized variables */
-    int row;
-    double value;
-    int cell;
-    int offset = int(CURRENT)*_num_groups*4;
-    
-    Material **materials = _mesh->getMaterials();
-    double* heights = _mesh->getLengthsY();
-    double* widths = _mesh->getLengthsX();
-    
-    vecZero(_b, _nc);
-    vecZero(_M, _num_groups*_nc);
-    vecZero(_A, (_num_groups+4)*_nc);
-
-    /* loop over mesh cells in y direction */
-    for (int y = 0; y < _cells_y; y++){
-    
-	/* loop over mesh cells in x direction */
-	for (int x = 0; x < _cells_x; x++){
-	    
-	    cell = y*_cells_x + x;
-	    
-	    /* loop over energy groups */
-	    for (int e = 0; e < _num_groups; e++){
-		
-		row = cell*_num_groups+e;
-		
-		/* delayed neutron precursors */
-		if (materials[cell]->getType() == FUNCTIONAL){
-		    for (int dg = 0; dg < _num_delay_groups; dg++){
-			_b[row] += materials[cell]->getChi()[e] * _mesh->getVolumes()[cell] * _lambda[dg] * static_cast<FunctionalMaterial*>(materials[cell])->getPrecConc(CURRENT, dg);
-		    }
-		}		
-		
-		/* absorption term */
-		value = materials[cell]->getSigmaA()[e] * _mesh->getVolumes()[cell];
-		_A[row*(_num_groups+4)+e+2] += value;
-		
-		/* scattering terms */
-		for (int g = 0; g < _num_groups; g++){
-		    if (e != g){
-			/* out scattering */
-			value = materials[cell]->getSigmaS()[g*_num_groups + e] * _mesh->getVolumes()[cell]; 
-			_A[row*(_num_groups+4)+e+2] += value;	      
-			
-			/* in scattering */
-			value = - materials[cell]->getSigmaS()[e*_num_groups + g] * _mesh->getVolumes()[cell];			    			    
-			_A[row*(_num_groups+4)+g+2] += value;
-		    }
-		}
-		
-		/* RIGHT SURFACE */
-		
-		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[2*_num_groups + e] 
-			 - materials[cell]->getDifTilde()[offset + 2*_num_groups + e]) 
-		    * heights[cell / _cells_x];
-		
-		_A[row*(_num_groups+4)+e+2] += value;
-	
-		/* set transport term on off diagonal */
-		if (x != _cells_x - 1){
-		    value = - (materials[cell]->getDifHat()[2*_num_groups + e] 
-			       + materials[cell]->getDifTilde()[offset + 2*_num_groups + e]) 
-			* heights[cell / _cells_x];
-		    
-		    _A[row*(_num_groups+4)+_num_groups+2] += value; 
-		}
-		
-		/* LEFT SURFACE */
-		
-		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[0*_num_groups + e] 
-			 + materials[cell]->getDifTilde()[offset + 0*_num_groups + e]) 
-		    * heights[cell / _cells_x];
-		
-		_A[row*(_num_groups+4)+e+2] += value;
-		
-		/* set transport term on off diagonal */
-		if (x != 0){
-		    value = - (materials[cell]->getDifHat()[0*_num_groups + e] 
-			       - materials[cell]->getDifTilde()[offset + 0*_num_groups + e]) 
-			* heights[cell / _cells_x];
-		    
-		    _A[row*(_num_groups+4)] += value; 
-		}
-		
-		/* BOTTOM SURFACE */
-		
-		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[1*_num_groups + e] 
-			 - materials[cell]->getDifTilde()[offset + 1*_num_groups + e]) 
-		    * widths[cell % _cells_x];
-		
-		_A[row*(_num_groups+4)+e+2] += value;
-		
-		/* set transport term on off diagonal */
-		if (y != _cells_y - 1){
-		    value = - (materials[cell]->getDifHat()[1*_num_groups + e] 
-			       + materials[cell]->getDifTilde()[offset + 1*_num_groups + e]) 
-			* widths[cell % _cells_x];
-		    
-		    _A[row*(_num_groups+4)+1] += value; 
-		}
-		
-		/* TOP SURFACE */
-		
-		/* set transport term on diagonal */
-		value = (materials[cell]->getDifHat()[3*_num_groups + e] 
-			 + materials[cell]->getDifTilde()[offset + 3*_num_groups + e]) 
-		    * widths[cell % _cells_x];
-		
-		_A[row*(_num_groups+4)+e+2] += value;
-		
-		/* set transport term on off diagonal */
-		if (y != 0){
-		    value = - (materials[cell]->getDifHat()[3*_num_groups + e] 
-			       - materials[cell]->getDifTilde()[offset + 3*_num_groups + e]) 
-			* widths[cell % _cells_x];
-		    
-		    _A[row*(_num_groups+4)+_num_groups+3] += value; 
-		}
-		
-		/* add fission terms to M */
-		for (int g = 0; g < _num_groups; g++){
-		    
-		    value = (1.0 - _beta_sum) * materials[cell]->getChi()[e] * materials[cell]->getNuSigmaF()[g] * _mesh->getVolumes()[cell] / _k_eff_0;
-		    
-		    _M[row*_num_groups+g] += value; 
-		}
-	    }
-	}
-    }
-    
-    log_printf(INFO,"Done constructing matrices...");
 }

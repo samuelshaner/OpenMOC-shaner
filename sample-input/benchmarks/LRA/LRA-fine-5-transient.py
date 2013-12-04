@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 ###############################################################################
 
 log.setLogLevel('NORMAL')
-dt_cmfd = 1e-2;
+dt_cmfd = 1e-3;
 
 ###############################################################################
 ###########################   Creating Materials   ############################
@@ -18,7 +18,7 @@ dt_cmfd = 1e-2;
 
 log.py_printf('NORMAL', 'Importing materials data from py...')
 
-materials = materialize.materialize('LRA-materials-transient.py')
+materials = materialize.materialize('LRA-materials-transient-ss.py')
 
 region1 = materials['region_1'].getId()
 region2 = materials['region_2'].getId()
