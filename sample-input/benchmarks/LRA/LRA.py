@@ -110,6 +110,7 @@ log.py_printf('NORMAL', 'Creating cmfd...')
 cmfd = Cmfd(geometry)
 cmfd.setOmega(1.0)
 cmfd.computeKeff()
+plotter.plotFlatSourceRegions(geometry, gridsize=500)
 
 log.py_printf('NORMAL', 'k_eff = %f', cmfd.getKeff())
 

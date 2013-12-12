@@ -32,9 +32,9 @@ enum solveType {
 
 enum transientType {
   NONE,
-  ADIABATIC,
-  IQS,
-  OMEGA_MODE
+  THETA,
+  MAF,
+  ADIABATIC
 };
 
 
@@ -137,7 +137,7 @@ public:
   void setFSRBounds();
   void setCellBounds();
 
-  void computeDs(double relax_factor=-1.0);
+  void computeDs(double relax_factor=-1.0, materialState state=FSR_OLD);
   void computeXS(Mesh* mesh=NULL, materialState state=FSR);
   double computeDiffCorrect(double d, double h);
   void updateMOCFlux();
@@ -247,6 +247,10 @@ public:
 
   void setTimeStepper(TimeStepper* ts);
   TimeStepper* getTimeStepper();
+  double getPrecursorConc(int fsr_id, int dg);
+  double getSigmaA(int fsr_id, int g);
+  void dumpFSRs();
+  double getTemperature(int fsr_id);
 };
 
 #endif /* MESH_H_ */

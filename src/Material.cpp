@@ -35,6 +35,7 @@ Material::Material(short int id) {
 
     _sigma_t = NULL;
     _sigma_a = NULL;
+    _sigma_a_ref = NULL;
     _sigma_s = NULL;
     _sigma_f = NULL;
     _nu_sigma_f = NULL;
@@ -409,6 +410,10 @@ void Material::setNumEnergyGroups(const int num_groups) {
     _nu_sigma_f = new double[_num_groups];
     _chi = new double[_num_groups];
     _sigma_s = new double[_num_groups*_num_groups];
+    _buckling = new double[_num_groups];
+
+    for (int g = 0; g < _num_groups; g++)
+      _buckling[g] = 0.0;
 }
 
 
@@ -432,13 +437,8 @@ void Material::computeSigmaT(){
 
     /* set sigma t to sigma_a */
     for (int i=0; i < _num_groups; i++)
-	_sigma_t[i] = _sigma_a[i];
+        _sigma_t[i] = _sigma_a[i];
     
-    if (_buckling != NULL && _dif_coef != NULL){
-	for (int i=0; i < _num_groups; i++)
-	    _sigma_t[i] += _buckling[i] * _dif_coef[i];
-    }
-
     /* add scattering xs */
     for (int e=0; e < _num_groups; e++){
 	for (int g=0; g < _num_groups; g++)
@@ -473,11 +473,12 @@ void Material::setSigmaA(double* xs, int num_groups) {
                  "%d which contains %d energy groups", num_groups,
                  _num_groups);
 
-    for (int i = 0; i < _num_groups; i++){
+    for (int i = 0; i < _num_groups; i++)
       _sigma_a[i] = xs[i];
-      
-      if (_buckling != NULL && _dif_coef != NULL)
-        _sigma_a[i] += _buckling[i] * _dif_coef[i];
+
+    if (_dif_coef != NULL && _buckling != NULL){
+      for (int i = 0; i < _num_groups; i++)
+	_sigma_a[i] += _dif_coef[i] * _buckling[i];
     }
 }
 
@@ -716,10 +717,6 @@ void Material::setBuckling(double* xs, int num_groups) {
     		  "for material %d which contains %d energy groups", num_groups,
                  _num_groups);
 
-    if (_buckling == NULL){
-      _buckling = new double[_num_groups];
-    }
-
     for (int i=0; i < _num_groups; i++)
         _buckling[i] = xs[i];
 }
@@ -816,7 +813,10 @@ void Material::checkSigmaT() {
     for (int i=0; i < _num_groups; i++) {
 
         /* Initialize the calculated total xs to the absorption xs */
-        calc_sigma_t = _sigma_a[i];
+        if (_type == BASE)
+	  calc_sigma_t = _sigma_a[i];
+	else
+	  calc_sigma_t = _sigma_a_ref[i];
 
         /* Increment calculated total xs by scatter xs for each energy group */
         for (int j=0; j < _num_groups; j++)

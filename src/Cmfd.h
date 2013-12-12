@@ -83,6 +83,7 @@ public:
   double getKeff();
   void setOmega(double omega);
   void checkNeutronBalance();
+  void setNumThreads(int num_threads);
 };
 
 #endif /* CMFD_H_ */

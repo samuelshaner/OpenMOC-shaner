@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 log.setLogLevel('NORMAL')
 dt_cmfd = 1e-3;
+num_threads = options.num_omp_threads
 
 ###############################################################################
 ###########################   Creating Materials   ############################
@@ -201,9 +202,11 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd...')
 
 cmfd  = Cmfd(geometry)
-cmfd.setOmega(1.75)
+cmfd.setOmega(1.5)
+cmfd.setNumThreads(num_threads)
+
 tcmfd = Tcmfd(geometry)
-tcmfd.setOmega(1.75)
+tcmfd.setOmega(1.5)
 tcmfd.setLambda([0.0654, 1.35])
 tcmfd.setBeta([0.0054, 0.001087])
 tcmfd.setVelocity([3e7, 3e5])
@@ -235,6 +238,16 @@ for t in range(int(3.0/dt_cmfd)):
    temps.append(transientSolver.getTemp())
    times.append(transientSolver.getTime())
 
+   if (abs(t*dt_cmfd-0.1) < 1.0e-6):
+      plotter.plotPrecursors(geometry, 0, gridsize=500)
+      plotter.plotPrecursors(geometry, 1, gridsize=500)
+      plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
+   elif (abs(t*dt_cmfd-1.45) < 1.0e-6):
+      plotter.plotPrecursors(geometry, 0, gridsize=500)
+      plotter.plotPrecursors(geometry, 1, gridsize=500)
+      plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
+      
+
 plt.figure()
 plt.plot(times, powers)
 plt.xlabel('time (s)')
@@ -242,10 +255,12 @@ plt.ylabel('Power (W/cc)')
 plt.yscale('log')
 plt.savefig('plots/powers.png')
    
-plt.figure()
-plt.plot(times, temps)
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+ax2.plot(times, temps, 'r')
+#plt.plot(times, temps)
 plt.xlabel('time (s)')
-plt.ylabel('Average Temperature (C)')
+ax2.set_ylabel('Average Temperature (C)')
 plt.savefig('plots/temps.png')
 
 ###############################################################################
@@ -254,10 +269,12 @@ plt.savefig('plots/temps.png')
 
 log.py_printf('NORMAL', 'Plotting data...')
 
+plotter.plotPrecursors(geometry, 0, gridsize=500)
+plotter.plotPrecursors(geometry, 1, gridsize=500)
 #plotter.plotMaterials(geometry, gridsize=500)
 #plotter.plotCells(geometry, gridsize=500)
 #plotter.plotFlatSourceRegions(geometry, gridsize=500)
-#plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
+plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
 
 log.py_printf('TITLE', 'Finished')
 

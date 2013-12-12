@@ -65,6 +65,7 @@ protected:
 
     /** An array of the absorption cross-sections for each energy group */
     double* _sigma_a;
+    double* _sigma_a_ref;
 
     /** A 2D array of the scattering cross-section matrix. The first index is 
      *  row number and second index is column number */

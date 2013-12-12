@@ -17,7 +17,7 @@ ThreadPrivateSolverTransient::ThreadPrivateSolverTransient(Geometry* geometry,
 
     _thread_flux = NULL;
     _thread_currents = NULL;
-    _transient_method = ADIABATIC;
+    _transient_method = MAF;
 }
 
 
@@ -121,24 +121,24 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 
     log_printf(INFO, "converging transient source");
 
-    //zeroTrackFluxes();
-
     /* Counter for the number of iterations to converge the source */
     _num_iterations = 0;
+
+    Mesh* mesh = _geometry->getMesh();
+
+    double cmfd_k_eff;
+    //mesh->zeroDs();
 
     /* The residual on the source */
     FP_PRECISION residual = 0.0;
 
-    /* The old residual and keff */
-    FP_PRECISION residual_old = 1.0;
-    FP_PRECISION keff_old = _k_eff;    
+    if (_geometry->getMesh()->getInitialState())
+      log_printf(NORMAL, "Iter %d: \tk_eff = %1.6f \tCMFD k_eff = %1.6f"
+		 "\tres = %1.3E", 0, _k_eff, _k_eff, residual);
+    else
+      log_printf(NORMAL, "Iter %d: \trho = $%1.4f"
+		 "\tres = %1.3E", 0, (_k_eff - mesh->getKeff0())/mesh->getKeff0()/mesh->getBetaSum(), residual);
 
-    if (_geometry->getMesh()->getInitialState()){
-	resetSegmentMaterials();
-    }
-
-    log_printf(NORMAL, "Iteration %d: \tk_eff = %1.6f"
-	    "\tres = %1.3E", 0, _k_eff, residual);
 
     /* Fission source iteration loop */
     for (int i=0; i < max_iterations; i++) {
@@ -150,10 +150,6 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 	/* compute the new source */
 	residual = computeFSRSources();
 	
-	/* normalize the fluxes */
-	if (!_geometry->getMesh()->getInitialState())
-	    normalizeBoundaryFluxes();
-
 	/* perform transport sweep */
 	transportSweep();	
 	
@@ -161,29 +157,27 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 	addSourceToScalarFlux();
 	
 	/* update the flux with cmfd */
-	_k_eff = _cmfd->computeKeff();
+	if (!(i >= 1 && residual < _source_convergence_thresh))    
+	    cmfd_k_eff = _cmfd->computeKeff();
 	
 	computeKeff();
 
 	_num_iterations++;
 
-	log_printf(NORMAL, "Iteration %d: \tk_eff = %1.6f"
-	    "\tres = %1.3E", _num_iterations, _k_eff, residual);
-	
+	if (_geometry->getMesh()->getInitialState())
+	  log_printf(NORMAL, "Iter %d: \tk_eff = %1.6f \tCMFD k_eff = %1.6f"
+		     "\tres = %1.3E", _num_iterations, _k_eff, cmfd_k_eff, residual);
+	else
+	  log_printf(NORMAL, "Iter %d: \trho = $%1.4f"
+		     "\tres = %1.3E", _num_iterations, 
+		     (_k_eff - mesh->getKeff0())/mesh->getKeff0()/mesh->getBetaSum(), residual);
+
 	/* Check for convergence of the fission source distribution */
-	if (i > 4 && residual < _source_convergence_thresh) {
-	    if (_geometry->getMesh()->getInitialState())
-		normalizeFluxes();
-	    else
-		normalizeBoundaryFluxes();
-
-	    residual = computeFSRSources();
-	    transportPass();
-	    return _k_eff;
+	if (i >= 1 && residual < _source_convergence_thresh) {	    
+	  _cmfd->getMesh()->computeXS();
+	  _cmfd->getMesh()->computeDs(1.0);
+	  return _k_eff;
 	}
-
-	residual_old = residual;
-	keff_old = _k_eff;
     }
 
     log_printf(WARNING, "Unable to converge the source after %d iterations",
@@ -290,17 +284,17 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 		    new_flux = fine_shape[r*_num_groups+G] * coarse_flux_new[i*_num_groups+G] 
 			* volumes[i] / velocity[G];
 
-		    if (mesh->getTransientType() == ADIABATIC){
-			method_source = 1.0/(velocity[G] * dt) * 
-			    (old_flux - _scalar_flux(r,G));	
+		    if (mesh->getTransientType() == THETA){
+		      method_source = 1.0/(velocity[G] * dt) * 
+			(old_flux - _scalar_flux(r,G));	
 		    }
-		    else if (mesh->getTransientType() == IQS){
+		    else if (mesh->getTransientType() == MAF){
 			method_source = 1.0/(velocity[G]) * 
 			    (old_flux * coarse_flux_new[i*_num_groups+G] 
 			    / coarse_flux_old[i*_num_groups+G] / dt 
 			     - _scalar_flux(r,G) * (1.0 / dt + frequency_new[i*_num_groups+G]));
 		    }
-		    else if (mesh->getTransientType() == OMEGA_MODE){
+		    else if (mesh->getTransientType() == ADIABATIC){
 	                method_source = 1.0/(velocity[G] * dt) * 
 			  (old_flux * exp(frequency_new[i*_num_groups+G] * dt) 
 			   - _scalar_flux(r,G) * (1.0 + log(new_flux / old_flux)));
@@ -526,7 +520,7 @@ void ThreadPrivateSolverTransient::transportSweep() {
     reduceThreadScalarFluxes();
 
     if (_cmfd->getMesh()->getCmfdOn())
-      reduceThreadSurfaceCurrents();
+        reduceThreadSurfaceCurrents();
     
     return;
 }
@@ -802,160 +796,4 @@ void ThreadPrivateSolverTransient::scaleTrackFlux(double scale_val){
 	    }
         }
     }
-}
-
-
-void ThreadPrivateSolverTransient::normalizeBoundaryFluxes(){
-
-    FP_PRECISION volume;
-    FP_PRECISION norm_factor;
-    int tid;
-    FP_PRECISION scatter_source;
-    FP_PRECISION fission_source;
-    FP_PRECISION delayed_source;
-    FP_PRECISION method_source;
-    double* nu_sigma_f;
-    double* sigma_s;
-    double* sigma_t;
-    double* chi;
-    Material* material;
-    Mesh* mesh = _geometry->getMesh();
-    Mesh* geom_mesh = _geometry->getGeomMesh();
-    int r;
-    double fis = 0.0;
-    double delay = 0.0;
-    double method = 0.0;
-    double scat = 0.0;
-    double total_source = 0.0;
-
-    FP_PRECISION source_residual = 0.0;
-    
-    /* For all regions, find the source */
-    std::vector<int>::iterator iter;
-    double* fine_shape = geom_mesh->getFluxes(PREVIOUS_CONV);
-    double* coarse_flux_new = mesh->getFluxes(PREVIOUS);
-    double* coarse_flux_old = mesh->getFluxes(PREVIOUS_CONV);
-    double* volumes = mesh->getVolumes();
-    double* velocity = mesh->getVelocity();
-    double old_flux;
-    double dt = mesh->getDtMOC();
-    double* frequency_new = mesh->getFrequencies(CURRENT);
-    double* frequency_old = mesh->getFrequencies(PREVIOUS);
-    TimeStepper* ts = mesh->getTimeStepper();
-    
-    
-    /* loop over coarse mesh cells */
-    for (int i = 0; i < mesh->getNumCells(); i++){
-	
-	/* loop over fsrs within cell */
-	for (iter = mesh->getCellFSRs()->at(i).begin(); iter != mesh->getCellFSRs()->at(i).end(); ++iter){
-	    
-	    r = *iter;
-
-	    material = _FSR_materials[r];
-	    nu_sigma_f = material->getNuSigmaF();
-	    chi = material->getChi();
-	    sigma_s = material->getSigmaS();
-	    sigma_t = material->getSigmaT();
-	    volume = _FSR_volumes[r];
-	    
-	    /* Compute fission source for each group */
-	    for (int e=0; e < _num_groups; e++)
-		_fission_sources(r,e) = _scalar_flux(r,e) * nu_sigma_f[e];
-	    
-	    fission_source = pairwise_sum<FP_PRECISION>(&_fission_sources(r,0), 
-							_num_groups);
-
-	    for (int e=0; e < _num_groups; e++)
-		_fission_sources(r,e) = _scalar_flux(r,e) * nu_sigma_f[e] * volume;
-	    
-	    /* Compute total scattering source for group G */
-	    for (int G=0; G < _num_groups; G++) {
-		scatter_source = 0;
-		_source_residuals(r,G) = 0.0;
-		
-		for (int g=0; g < _num_groups; g++)
-		    _scatter_sources(r,g) = sigma_s[G*_num_groups+g]*_scalar_flux(r,g);
-		
-		scatter_source = pairwise_sum<FP_PRECISION>(&_scatter_sources(r,0),
-							    _num_groups);
-	
-		/* delayed neutron precursor source */
-		if (mesh->getInitialState() == false){
-		    delayed_source = 0.0;
-		    if (material->isFissionable()){
-			for (int dg=0; dg < mesh->getNumDelayGroups(); dg++)
-			    delayed_source += mesh->getLambda()[dg] * 
-				static_cast<FunctionalMaterial*>(material)->getPrecConc(CURRENT, dg);
-		    }
-
-
-		    /* method source */
-		    method_source = 0.0;
-		    old_flux = fine_shape[r*_num_groups+G] * coarse_flux_old[i*_num_groups+G] 
-			* volumes[i] / velocity[G];
-		    if (mesh->getTransientType() == ADIABATIC){
-			method_source = 1.0/(velocity[G] * dt) * 
-			    (old_flux - _scalar_flux(r,G));	
-		    }
-		    else if (mesh->getTransientType() == IQS){
-			method_source = 1.0/(velocity[G]) * 
-			    (old_flux * coarse_flux_new[i*_num_groups+G] 
-			    / coarse_flux_old[i*_num_groups+G] / dt 
-			     - _scalar_flux(r,G) * (1.0 / dt + frequency_new[i*_num_groups+G]));
-		    }
-		    else if (mesh->getTransientType() == OMEGA_MODE){
-	                method_source = 1.0/(velocity[G] * dt) * 
-			  (old_flux * exp(frequency_new[i*_num_groups+G] *
-			  ts->getTime(CURRENT) - frequency_old[i*_num_groups+G] * 
-			  ts->getTime(PREVIOUS)) 
-			     - _scalar_flux(r,G) * (1.0 + log(_scalar_flux[r,G] / old_flux)));
-		    }
-		    else{
-	                log_printf(ERROR, "To solve a transient problem you must " 
-	                                  "give a transient method!");
-                    }
-
-		    /* Set the total source for region r in group G */
-		    _source(r,G) = ((1.0 - mesh->getBetaSum()) * (1.0 / mesh->getKeff0()) 
-				    * fission_source * chi[G] + chi[G] 
-				    * delayed_source + method_source) * volume;	
-
-		    scat += scatter_source * ONE_OVER_FOUR_PI;
-		    delay += chi[G] * delayed_source * ONE_OVER_FOUR_PI;
-		    method += chi[G] * method_source * ONE_OVER_FOUR_PI;
-		    fis += (1.0 - mesh->getBetaSum()) * (1.0 / mesh->getKeff0()) 
-				    * fission_source * chi[G] * ONE_OVER_FOUR_PI;
-		}
-		else{
-		    /* Set the total source for region r in group G */
-		    _source(r,G) = ((1.0 / _k_eff) * fission_source * chi[G]
-				    + scatter_source) * ONE_OVER_FOUR_PI;		 
-
-		    total_source += _source(r,G);
-		}
-	    }
-	}
-    }
-
-    total_source = pairwise_sum<FP_PRECISION>(_fission_sources, _num_FSRs*_num_groups);
-    
-    norm_factor = 1.0 / total_source;
-    
-    log_printf(DEBUG, "tot src = %f, Normalization factor = %f", 
-	       total_source, norm_factor);
-
-    /* Normalize angular boundary fluxes for each track */
-    #pragma omp parallel for schedule(guided)
-    for (int i=0; i < _tot_num_tracks; i++) {
-        for (int j=0; j < 2; j++) {
-            for (int p=0; p < _num_polar; p++) {
-                for (int e=0; e < _num_groups; e++) {
-                    _boundary_flux(i,j,p,e) *= norm_factor;
-                }
-            }
-        }
-    }
-    
-    return;
 }

@@ -16,8 +16,8 @@ max_iters = options.max_iters
 relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
-dt_cmfd = 1e-3
-dt_moc  = 1e-2
+dt_cmfd = 1.e-3
+dt_moc  = 1.e-2
 log.setLogLevel('NORMAL')
 
 ###############################################################################
@@ -27,13 +27,6 @@ log.setLogLevel('NORMAL')
 log.py_printf('NORMAL', 'Importing materials data from py...')
 
 materials = materialize.materialize('LRA-materials-transient.py')
-
-#region1 = materials['region_1'].getId()
-#region2 = materials['region_2'].getId()
-#region3 = materials['region_3'].getId()
-#region4 = materials['region_4'].getId()
-#region5 = materials['region_5'].getId()
-#region6 = materials['region_6'].getId()
 
 region1 = materials['region_1'].getId()
 region2 = materials['region_2'].getId()
@@ -226,13 +219,28 @@ transientSolver.setDtCMFD(dt_cmfd)
 transientSolver.setStartTime(0.0)
 transientSolver.setEndTime(3.0)
 transientSolver.setNumDelayGroups(2)
-transientSolver.setTransientMethod('ADIABATIC')
+transientSolver.setTransientMethod('MAF')
 transientSolver.setPowerInit(1.e-6)
 
+#plotter.plotFlatSourceRegions(geometry, gridsize=500)
+#plotter.plotTemperature(geometry, gridsize=500)
 transientSolver.solveInitialState()
+
+#plotter.plotSigmaA(geometry, 0)
+#plotter.plotSigmaA(geometry, 1)
 
 for t in range(int(3.0/dt_moc)):
    transientSolver.solveOuterStep()
+
+   #if (abs(t*dt_moc - 1.72) < 1.e-6):
+   #   plotter.plotTemperature(geometry, gridsize=500)
+   #elif (abs(t*dt_moc - 0.1) < 1.e-6):
+   #   plotter.plotTemperature(geometry, gridsize=500)
+   #elif (abs(t*dt_moc - 1.0) < 1.e-6):
+   #   plotter.plotTemperature(geometry, gridsize=500)
+
+    #  plotter.plotSigmaA(geometry, 0)
+     # plotter.plotSigmaA(geometry, 1)
 
 ###############################################################################
 ############################   Generating Plots   #############################
@@ -242,9 +250,9 @@ log.py_printf('NORMAL', 'Plotting data...')
 
 #plotter.plotMaterials(geometry, gridsize=500)
 #plotter.plotCells(geometry, gridsize=500)
-#plotter.plotFlatSourceRegions(geometry, gridsize=500)
-plotter.plotFluxes(geometry, solver, energy_groups=[1,2])
-plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
+
+#plotter.plotFluxes(geometry, solver, energy_groups=[1,2])
+#plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
 
 log.py_printf('TITLE', 'Finished')
 

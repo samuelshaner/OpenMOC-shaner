@@ -246,7 +246,8 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
 	    cell_material->setSigmaTByGroup(tot_tally / rxn_tally, e);
 	    cell_material->setNuSigmaFByGroup(nu_fis_tally / rxn_tally, e);
 	    cell_material->setDifCoefByGroup(dif_tally / rxn_tally, e);
-	    fluxes[i*_num_groups+e] = rxn_tally / vol_tally;      
+	    if (state == FSR)
+	      fluxes[i*_num_groups+e] = rxn_tally / vol_tally;      
 	    
 	    log_printf(DEBUG, "cell: %i, group: %i, vol: %f, siga: %f, sigt: %f, nu_sigf: %f, dif_coef: %f, flux: %f", i, e, vol_tally, abs_tally / rxn_tally, 
 		       tot_tally / rxn_tally, nu_fis_tally / rxn_tally, dif_tally / rxn_tally, rxn_tally / vol_tally);
@@ -266,7 +267,7 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
  *        and d_tilde - surface diffusion coefficient correction factor)
  *        for each mesh while ensuring neutron balance is achieved.
  */
-void Mesh::computeDs(double relax_factor){
+void Mesh::computeDs(double relax_factor, materialState state){
 
     if (relax_factor == -1.0)
 	relax_factor = _relax_factor;
@@ -281,7 +282,7 @@ void Mesh::computeDs(double relax_factor){
     int next_surface;
     int cell, cell_next;
 
-    double* fluxes = getFluxes(FSR_OLD);
+    double* fluxes = getFluxes(state);
     
     /* loop over mesh cells in y direction */
     for (int y = 0; y < _cells_y; y++){
@@ -428,12 +429,14 @@ void Mesh::computeDs(double relax_factor){
 		    }  
 
 		    /* perform underrelaxation on d_tilde */
-		    d_tilde = _materials[cell]->getDifTilde()[int(FORWARD)*4*_num_groups + surface*_num_groups + e] * (1 - relax_factor) + relax_factor * d_tilde;
+		    d_tilde = _materials[cell]->getDifTilde()[int(FORWARD)*4*_num_groups 
+			 + surface*_num_groups + e] * (1 - relax_factor) + relax_factor * d_tilde;
 		    
 		    /* set d_hat and d_tilde */
 		    _materials[cell]->setDifHatByGroup(d_hat, e, surface);
-		    
-		    _materials[cell]->setDifTildeByGroup(d_tilde, e, surface);
+
+		    if (state == FSR_OLD)
+		        _materials[cell]->setDifTildeByGroup(d_tilde, e, surface);
 		    
 		    log_printf(DEBUG, "c: %i, g: %i, s: %i, cur_dif: %.12f", y*_cells_x + x, e, surface, current -length * (-d_tilde*(flux+flux_next) - sense * d_hat * (flux_next - flux)));
 		    
@@ -566,6 +569,7 @@ void Mesh::computeFineShape(double* geom_shape, double* mesh_flux){
 		for (int g = 0; g < ng; g++){
 		    geom_shape[*iter*ng+g] = _FSR_fluxes[*iter*ng+g] * _velocity[g] /
 			_volumes[cell] / mesh_flux[cell*ng+g];
+		    log_printf(DEBUG, "flux: %.12f, fine: %f, amp: %.12f", _FSR_fluxes[*iter*ng+g], geom_shape[*iter*ng+g], mesh_flux[cell*ng+g]);
 		}
 	    }
 	}
@@ -1554,7 +1558,7 @@ void Mesh::dumpXS(){
 	log_printf(NORMAL, "Surface      : %i", s);
 	log_printf(NORMAL, "Diff Hat     : %f", _materials[i]->getDifHat()[s*_num_groups+e]);
 	log_printf(NORMAL, "Diff Tilde   : %f", _materials[i]->getDifTilde()[s*_num_groups+e]);
-	log_printf(NORMAL, "Current      : %f", _currents[i*_num_groups*8 + s*_num_groups + e]);
+	//log_printf(NORMAL, "Current      : %f", _currents[i*_num_groups*8 + s*_num_groups + e]);
       }
     }
   }
@@ -1774,3 +1778,42 @@ TimeStepper* Mesh::getTimeStepper(){
     return _ts;
 }
 
+
+double Mesh::getPrecursorConc(int fsr_id, int dg){
+
+  if (_materials[_FSRs_to_cells[fsr_id]]->getType() == FUNCTIONAL)
+    return static_cast<FunctionalMaterial*>(_materials[_FSRs_to_cells[fsr_id]])->getPrecConc(CURRENT, dg);
+  else
+    return 0.0;
+
+
+}
+
+
+double Mesh::getSigmaA(int fsr_id, int g){
+
+  return _materials[_FSRs_to_cells[fsr_id]]->getSigmaA()[g];
+  
+}
+
+
+void Mesh::dumpFSRs(){
+
+    std::vector<int>::iterator iter;
+
+    /* loop over mesh cells */
+    for (int i = 0; i < _cells_x*_cells_y; i++){
+	
+      /* loop over FRSs in mesh cell */
+      for (iter = _cell_fsrs.at(i).begin(); iter != _cell_fsrs.at(i).end(); ++iter) {
+	log_printf(NORMAL, "cell: %i, fsr: %i", i, *iter);
+      }
+    }
+}
+
+
+double Mesh::getTemperature(int fsr_id){
+
+  return _FSR_materials[fsr_id]->getTemperature(CURRENT);
+
+}

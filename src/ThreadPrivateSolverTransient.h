@@ -73,7 +73,6 @@ public:
 
     void initialize();
     void scaleTrackFlux(double scale_val);
-    void normalizeBoundaryFluxes();
     void resetSegmentMaterials();
 };
 

@@ -27,9 +27,6 @@ class FunctionalMaterial : public Material {
 
 protected:
 
-    /** An array of the absorption cross-sections for each energy group */
-    double* _sigma_a_ref;
-
     /** An array of the precursor concentrations */
     double* _prec_conc;
 

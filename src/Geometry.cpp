@@ -1569,7 +1569,7 @@ void Geometry::initializeMesh(){
     log_printf(DEBUG, "mesh cell height: %i", _mesh->getCellsY());
     
     /* Decide whether cmfd acceleration is really needed for MOC acceleration */
-    if (_num_FSRs <= 1000 && _mesh->getSolveType() == MOC){
+    if (_num_FSRs <= 50 && _mesh->getSolveType() == MOC){
      _mesh->setAcceleration(false);
       log_printf(INFO, "Cmfd acceleration was turned off because there are "
 		"<= 100 fsrs and CMFD is not needed for small geometries");

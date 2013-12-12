@@ -56,7 +56,6 @@ void matSubtract(double* AM, double* A, double omega, double* M, int cx, int cy,
     vecCopy(A, AM, cx*cy*ng*(ng+4));
     
     /* subtract omega*M from AM */
-    #pragma omp parallel for
     for (int i = 0; i < cx*cy*ng; i++){
 	for (int e = 0; e < ng; e++)
 	    AM[i*(ng+4)+e+2] -= omega*M[i*ng+e];		

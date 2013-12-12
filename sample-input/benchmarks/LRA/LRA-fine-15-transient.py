@@ -8,7 +8,8 @@ import openmoc.materialize as materialize
 ###############################################################################
 
 log.setLogLevel('NORMAL')
-dt_cmfd = 1e-4;
+dt_cmfd = 1e-3;
+num_threads = options.num_omp_threads
 
 ###############################################################################
 ###########################   Creating Materials   ############################
@@ -25,8 +26,6 @@ region4 = materials['region_4'].getId()
 region5 = materials['region_5'].getId()
 region6 = materials['region_6'].getId()
 
-
-
 ###############################################################################
 ###########################   Creating Surfaces   #############################
 ###############################################################################
@@ -39,9 +38,9 @@ planes.append(XPlane(x=82.5))
 planes.append(YPlane(y=-82.5))
 planes.append(YPlane(y=82.5))
 planes[0].setBoundaryType(REFLECTIVE)
-planes[1].setBoundaryType(ZERO_FLUX)
+planes[1].setBoundaryType(VACUUM)
 planes[2].setBoundaryType(REFLECTIVE)
-planes[3].setBoundaryType(ZERO_FLUX)
+planes[3].setBoundaryType(VACUUM)
 
 
 ###############################################################################
@@ -231,6 +230,7 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd...')
 
 cmfd  = Cmfd(geometry)
+cmfd.setNumThreads(num_threads)
 cmfd.setOmega(1.5)
 
 tcmfd = Tcmfd(geometry)

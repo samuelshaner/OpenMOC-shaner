@@ -38,7 +38,7 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
     _sold     = new double[_nc];
     _phi_old  = NULL;  
     _phi_new  = NULL;  
-    _b        = new double[_nc];  
+    _b        = new double[_nc];
     _b_prime  = new double[_nc];  
 
     _AM       = new double[_nc*(4+_ng)];
@@ -105,7 +105,7 @@ double Cmfd::computeKeff(){
 
     if (_mesh->getInitialState() == false){
       matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
-      linearSolveRB(_AM, _phi_new, _b, _phi_temp, conv, _omega, _cx, _cy, _ng, 10000);
+      linearSolveRB(_AM, _phi_new, _b, _phi_temp, _conv_criteria, _omega, _cx, _cy, _ng, 10000);
 
     }
     else{
@@ -339,18 +339,13 @@ void Cmfd::constructMatrices(){
     double dt;
     double* velocity;
     double* frequency_new;
-    double* frequency_old;
-    double* flux_new;
     double* flux_old;
     TimeStepper* ts;
-    
 
     if (_mesh->getInitialState() == false){
 	dt = _mesh->getDtMOC();
 	velocity = _mesh->getVelocity();
 	frequency_new = _mesh->getFrequencies(CURRENT);
-	frequency_old = _mesh->getFrequencies(PREVIOUS);
-	flux_new = _mesh->getFluxes(FSR_OLD);
 	flux_old = _mesh->getFluxes(PREVIOUS_CONV);
 	ts = _mesh->getTimeStepper();
     }
@@ -376,22 +371,22 @@ void Cmfd::constructMatrices(){
 		if (_mesh->getInitialState() == false){
 		    
 		    /* method source */
-		    if (_mesh->getTransientType() == ADIABATIC){
+		    if (_mesh->getTransientType() == THETA){
 
 			_b[row] = flux_old[row] / (velocity[e] * dt) * volumes[cell];
 
 			value = volumes[cell] / (velocity[e] * dt); 
 			_A[row*(_ng+4)+e+2] += value;
 		    }
-		    else if (_mesh->getTransientType() == IQS){
+		    else if (_mesh->getTransientType() == MAF){
 
-			_b[row] = _mesh->getFluxes(PREVIOUS)[row] 
+		        _b[row] = _mesh->getFluxes(PREVIOUS)[row] 
 			  / (velocity[e] * dt) * volumes[cell]; 
 
 			value = volumes[cell] / velocity[e] * (1.0 / dt + frequency_new[row]); 
 			_A[row*(_ng+4)+e+2] += value;
 		    }
-		    else if (_mesh->getTransientType() == OMEGA_MODE){
+		    else if (_mesh->getTransientType() == ADIABATIC){
 
 			_b[row] = flux_old[row] / (velocity[e] * dt) *
 			  exp(frequency_new[row] * dt) 
@@ -401,30 +396,27 @@ void Cmfd::constructMatrices(){
 			    * (1.0 + log(_mesh->getFluxes(PREVIOUS)[row] / flux_old[row])); 
 			_A[row*(_ng+4)+e+2] += value;
 
-			// value = volumes[cell] / (velocity[e] * dt) 
-			//  * (1.0 + log(flux_new[row] / flux_old[row])); 
-			//_A[row*(_ng+4)+e+2] += value;
 		    }
 
 		    /* delayed source */
 		    if (material->getType() == FUNCTIONAL){
 			for (dg = 0; dg < _mesh->getNumDelayGroups(); dg++){
-			    _b[row] += material->getChi()[e] * _mesh->getVolumes()[cell] * 
+			    _b[row] += material->getChi()[e] * volumes[cell] * 
 				_mesh->getLambda()[dg] * static_cast<FunctionalMaterial*>(material)->getPrecConc(CURRENT, dg);
 			}
 		    }	
 		}	
 				
 		/* absorption term */
-		value = material->getSigmaA()[e] * _mesh->getVolumes()[cell];
+		value = material->getSigmaA()[e] * volumes[cell];
 		_A[row*(_ng+4)+e+2] += value;
 
 		/* out (1st) and in (2nd) scattering */
 		for (g = 0; g < _ng; g++){
 		    if (e != g){
-			value = material->getSigmaS()[g*_ng+e] * _mesh->getVolumes()[cell]; 
+			value = material->getSigmaS()[g*_ng+e] * volumes[cell]; 
 			_A[row*(_ng+4)+e+2] += value;
-			value = - material->getSigmaS()[e*_ng + g] * _mesh->getVolumes()[cell];
+			value = - material->getSigmaS()[e*_ng + g] * volumes[cell];
 			_A[row*(_ng+4)+g+2] += value;
 		    }
 		}
@@ -435,7 +427,7 @@ void Cmfd::constructMatrices(){
 		
 		value = (material->getDifHat()[2*_ng + e] 
 			 - material->getDifTilde()[offset + 2*_ng + e]) 
-		    * heights[cell / _cx];
+		  * heights[cell / _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
 		
@@ -444,7 +436,7 @@ void Cmfd::constructMatrices(){
 		if (x != _cx - 1){
 		    value = - (material->getDifHat()[2*_ng + e] 
 			       + material->getDifTilde()[offset + 2*_ng + e]) 
-			* heights[cell / _cx];
+		      * heights[cell / _cx];
 		    
 		    _A[row*(_ng+4)+_ng+2] += value; 
 		}
@@ -462,7 +454,7 @@ void Cmfd::constructMatrices(){
 		if (x != 0){
 		    value = - (material->getDifHat()[0*_ng + e] 
 			       - material->getDifTilde()[offset + 0*_ng + e]) 
-			* heights[cell / _cx];
+		      * heights[cell / _cx];
 		    
 		    _A[row*(_ng+4)] += value; 
 		}
@@ -472,7 +464,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on diagonal */
 		value = (material->getDifHat()[1*_ng + e] 
 			 - material->getDifTilde()[offset + 1*_ng + e]) 
-		    * widths[cell % _cx];
+		  * widths[cell % _cx];
 		
 		_A[row*(_ng+4)+e+2] += value;        
 		
@@ -480,7 +472,7 @@ void Cmfd::constructMatrices(){
 		if (y != _cy - 1){
 		    value = - (material->getDifHat()[1*_ng + e] 
 			       + material->getDifTilde()[offset + 1*_ng + e]) 
-			* widths[cell % _cx];
+		      * widths[cell % _cx];
 		    
 		    _A[row*(_ng+4)+1] += value; 
 		}
@@ -490,7 +482,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on diagonal */
 		value = (material->getDifHat()[3*_ng + e] 
 			 + material->getDifTilde()[offset + 3*_ng + e]) 
-		    * widths[cell % _cx];
+		  * widths[cell % _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
 		
@@ -498,7 +490,7 @@ void Cmfd::constructMatrices(){
 		if (y != 0){
 		    value = - (material->getDifHat()[3*_ng + e] 
 			       - material->getDifTilde()[offset + 3*_ng + e]) 
-			* widths[cell % _cx];
+		      * widths[cell % _cx];
 		    
 		    _A[row*(_ng+4)+_ng+3] += value; 
 		}
@@ -506,12 +498,12 @@ void Cmfd::constructMatrices(){
 		/* fission source */
 		for (g = 0; g < _ng; g++){	    
 		    if (_mesh->getInitialState() == true){
-			value = material->getChi()[e] * material->getNuSigmaF()[g] *  _mesh->getVolumes()[cell];	   
+			value = material->getChi()[e] * material->getNuSigmaF()[g] *  volumes[cell];
 		    }
 		    else{
 			value = (1.0 - _mesh->getBetaSum()) / _mesh->getKeff0() * 
 			    material->getChi()[e] * material->getNuSigmaF()[g] * 
-			    _mesh->getVolumes()[cell];	    
+			    volumes[cell];	    
 		    }
 		    
 		    _M[row*_ng+g] += value; 
@@ -567,26 +559,39 @@ void Cmfd::setOmega(double omega){
 
 void Cmfd::checkNeutronBalance(){
 
+  //    if (_solve_method == MOC)
+  //	_mesh->computeXS();
+
+  //_mesh->computeDs();
+
     if (_solve_method == MOC)
-	_mesh->computeXS();
-
-    _mesh->computeDs();
-
-    _phi_new = _mesh->getFluxes(CURRENT);
-
+        _phi_new = _mesh->getFluxes(FSR_OLD);
+    else
+        _phi_new = _mesh->getFluxes(CURRENT);
+    
     /* construct matrices */
     constructMatrices();
     
     /* get right hand side */
     matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
-    vecScale(_snew, 1.0/_k_eff, _nc);
-
+    vecScale(_snew, 1.0/_mesh->getKeff0(), _nc);
+    
     matMultA(_A, _phi_new, _sold, _cx, _cy, _ng);
-
+    
     double sumleft = vecSum(_sold, _nc);
     double sumright = vecSum(_snew, _nc);
+    
+    log_printf(NORMAL, "cmfd balance: %1.3E", sumleft - sumright);
+    
+}
 
-    for (int i = 0; i < _nc; i++)
-	log_printf(NORMAL, "cnb dif: %.12f", fabs(_sold[i] - _snew[i]));
 
+void Cmfd::setNumThreads(int num_threads) {
+
+    if (num_threads <= 0)
+        log_printf(ERROR, "Unable to set the number of threads for the Solver "
+		   "to %d since it is less than or equal to 0", num_threads);
+
+    /* Set the number of threads for OpenMP */
+    omp_set_num_threads(num_threads);
 }

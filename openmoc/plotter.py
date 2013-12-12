@@ -386,6 +386,7 @@ def plotFlatSourceRegions(geometry, gridsize=250):
             geometry.findCellContainingCoords(point)
             fsr_id = geometry.findFSRId(point)
             surface[j][i] = color_map[fsr_id % num_colors]
+            surface[j][i] = fsr_id
 
     # Flip the surface vertically to align NumPy row/column indices with the
     # orientation expected by the user
@@ -636,3 +637,243 @@ def plotMeshFluxes(mesh, energy_groups=[1], gridsize=500):
         filename = directory + 'mesh-flux-group-' + str(group) + '.png'
         fig.savefig(filename, bbox_inches='tight')
 
+
+
+##
+# @brief This method takes in a geometry object and plots a color-coded 2D surface #        plot representing the materials in the geometry.
+# @details The geometry object must be initialized with materials, cells, 
+#          universes and lattices before being passed into this method. A user
+#          may invoke this function from an OpenMOC Python file as follows:
+#
+# @code
+#         openmoc.plotter.plotPrecursors(my_geometry)
+# @endcode
+#
+# @param geometry a geometry object which has been initialized with materials,
+#        cells, universes and lattices
+# @param gridsize an optional number of grid cells for the plot
+def plotPrecursors(geometry, dg, gridsize=250):
+
+    global subdirectory
+
+    directory = getOutputDirectory() + subdirectory
+
+    # Make directory if it does not exist
+    if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    # Error checking
+    if not 'Geometry' in str(type(geometry)):
+        py_printf('ERROR', 'Unable to plot the materials since ' + \
+                    'input was not a geometry class object')
+    if not isinstance(gridsize, int):
+        py_printf('ERROR', 'Unable to plot the materials since ' + \
+                    'since the gridsize %s is not an integer', str(gridsize))
+    if gridsize <= 0:
+        py_printf('Error', 'Unable to plot the materials ' + \
+                    'with a negative gridsize (%d)', gridsize)
+
+    py_printf('NORMAL', 'Plotting the precursors...')
+
+    # Initialize a numpy array for the surface colors
+    surface = numpy.zeros((gridsize, gridsize))
+
+    # Retrieve the bounding box for the geometry
+    xmin = geometry.getXMin()
+    xmax = geometry.getXMax()
+    ymin = geometry.getYMin()
+    ymax = geometry.getYMax()
+    prec_max = 0.0
+    prec_min = 0.0
+
+    # Initialize numpy arrays for the grid points
+    xcoords = np.linspace(xmin, xmax, gridsize)
+    ycoords = np.linspace(ymin, ymax, gridsize)
+
+    # Find the material IDs for each grid point
+    for i in range(gridsize):
+        for j in range(gridsize):
+
+            x = xcoords[i]
+            y = ycoords[j]
+
+            point = LocalCoords(x, y)
+            point.setUniverse(0)
+            geometry.findCellContainingCoords(point)
+            fsr_id = geometry.findFSRId(point)
+            mesh = geometry.getMesh()
+            prec_conc = mesh.getPrecursorConc(fsr_id, dg)
+
+            surface[j][i] = prec_conc
+
+    # Flip the surface vertically to align NumPy row/column indices with the
+    # orientation expected by the user
+    surface = np.flipud(surface)
+
+    # Plot a 2D color map of the materials
+    fig = plt.figure()
+    plt.imshow(surface, extent=[xmin, xmax, ymin, ymax])
+    plt.title('Precursors')
+    filename = directory + 'precursors' + str(dg) + '.png'
+    fig.savefig(filename, bbox_inches='tight')
+
+
+
+##
+# @brief This method takes in a geometry object and plots a color-coded 2D surface #        plot representing the materials in the geometry.
+# @details The geometry object must be initialized with materials, cells, 
+#          universes and lattices before being passed into this method. A user
+#          may invoke this function from an OpenMOC Python file as follows:
+#
+# @code
+#         openmoc.plotter.plotPrecursors(my_geometry)
+# @endcode
+#
+# @param geometry a geometry object which has been initialized with materials,
+#        cells, universes and lattices
+# @param gridsize an optional number of grid cells for the plot
+def plotSigmaA(geometry, g, gridsize=250):
+
+    global subdirectory
+
+    directory = getOutputDirectory() + subdirectory
+
+    # Make directory if it does not exist
+    if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    # Error checking
+    if not 'Geometry' in str(type(geometry)):
+        py_printf('ERROR', 'Unable to plot the materials since ' + \
+                    'input was not a geometry class object')
+    if not isinstance(gridsize, int):
+        py_printf('ERROR', 'Unable to plot the materials since ' + \
+                    'since the gridsize %s is not an integer', str(gridsize))
+    if gridsize <= 0:
+        py_printf('Error', 'Unable to plot the materials ' + \
+                    'with a negative gridsize (%d)', gridsize)
+
+    py_printf('NORMAL', 'Plotting sigma a...')
+
+    # Initialize a numpy array for the surface colors
+    surface = numpy.zeros((gridsize, gridsize))
+
+    # Retrieve the bounding box for the geometry
+    xmin = geometry.getXMin()
+    xmax = geometry.getXMax()
+    ymin = geometry.getYMin()
+    ymax = geometry.getYMax()
+    prec_max = 0.0
+    prec_min = 0.0
+
+    # Initialize numpy arrays for the grid points
+    xcoords = np.linspace(xmin, xmax, gridsize)
+    ycoords = np.linspace(ymin, ymax, gridsize)
+
+    # Find the material IDs for each grid point
+    for i in range(gridsize):
+        for j in range(gridsize):
+
+            x = xcoords[i]
+            y = ycoords[j]
+
+            point = LocalCoords(x, y)
+            point.setUniverse(0)
+            geometry.findCellContainingCoords(point)
+            fsr_id = geometry.findFSRId(point)
+            mesh = geometry.getMesh()
+            sigma_a = mesh.getSigmaA(fsr_id, g)
+
+            surface[j][i] = sigma_a
+
+    # Flip the surface vertically to align NumPy row/column indices with the
+    # orientation expected by the user
+    surface = np.flipud(surface)
+
+    # Plot a 2D color map of the materials
+    fig = plt.figure()
+    plt.imshow(surface, extent=[xmin, xmax, ymin, ymax])
+    plt.title('Sigma A')
+    plt.colorbar()
+    filename = directory + 'sigma_a_' + str(g) + '.png'
+    fig.savefig(filename, bbox_inches='tight')
+
+
+##
+# @brief This method takes in a geometry object and plots a color-coded 2D surface #        plot representing the materials in the geometry.
+# @details The geometry object must be initialized with materials, cells, 
+#          universes and lattices before being passed into this method. A user
+#          may invoke this function from an OpenMOC Python file as follows:
+#
+# @code
+#         openmoc.plotter.plotPrecursors(my_geometry)
+# @endcode
+#
+# @param geometry a geometry object which has been initialized with materials,
+#        cells, universes and lattices
+# @param gridsize an optional number of grid cells for the plot
+def plotTemperature(geometry, gridsize=250):
+
+    global subdirectory
+
+    directory = getOutputDirectory() + subdirectory
+
+    # Make directory if it does not exist
+    if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    # Error checking
+    if not 'Geometry' in str(type(geometry)):
+        py_printf('ERROR', 'Unable to plot the materials since ' + \
+                    'input was not a geometry class object')
+    if not isinstance(gridsize, int):
+        py_printf('ERROR', 'Unable to plot the materials since ' + \
+                    'since the gridsize %s is not an integer', str(gridsize))
+    if gridsize <= 0:
+        py_printf('Error', 'Unable to plot the materials ' + \
+                    'with a negative gridsize (%d)', gridsize)
+
+    py_printf('NORMAL', 'Plotting the temperature...')
+
+    # Initialize a numpy array for the surface colors
+    surface = numpy.zeros((gridsize, gridsize))
+
+    # Retrieve the bounding box for the geometry
+    xmin = geometry.getXMin()
+    xmax = geometry.getXMax()
+    ymin = geometry.getYMin()
+    ymax = geometry.getYMax()
+    prec_max = 0.0
+    prec_min = 0.0
+
+    # Initialize numpy arrays for the grid points
+    xcoords = np.linspace(xmin, xmax, gridsize)
+    ycoords = np.linspace(ymin, ymax, gridsize)
+
+    # Find the material IDs for each grid point
+    for i in range(gridsize):
+        for j in range(gridsize):
+
+            x = xcoords[i]
+            y = ycoords[j]
+
+            point = LocalCoords(x, y)
+            point.setUniverse(0)
+            geometry.findCellContainingCoords(point)
+            fsr_id = geometry.findFSRId(point)
+            mesh = geometry.getMesh()
+            temp = mesh.getTemperature(fsr_id)
+
+            surface[j][i] = temp
+
+    # Flip the surface vertically to align NumPy row/column indices with the
+    # orientation expected by the user
+    surface = np.flipud(surface)
+
+    # Plot a 2D color map of the materials
+    fig = plt.figure()
+    plt.imshow(surface, extent=[xmin, xmax, ymin, ymax])
+    plt.colorbar()
+    plt.title('Temperature')
+    filename = directory + 'temperature.png'
+    fig.savefig(filename, bbox_inches='tight')
