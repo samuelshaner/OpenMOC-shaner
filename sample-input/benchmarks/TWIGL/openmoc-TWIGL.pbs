@@ -1,0 +1,22 @@
+#!/bin/sh
+#######################################
+# Specify nodes, processors per node,
+# and maximum running time
+#######################################
+
+#PBS -l nodes=1:ppn=12
+#PBS -l walltime=24:00:00
+
+#######################################
+# Enter directory and set PATH
+#######################################
+
+cd $PBS_O_WORKDIR
+PATH=$PBS_O_PATH
+
+#######################################
+# Run MPI job and kill MPD when done
+#######################################
+
+#PBS -k eo
+python TWIGL-fine-8-transport-transient.py -t 12 -f True -r 0.3 -a 32 -s 0.04
