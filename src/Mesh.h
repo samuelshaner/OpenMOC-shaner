@@ -21,6 +21,7 @@
 #include "FunctionalMaterial.h"
 #include "Quadrature.h"
 #include "TimeStepper.h"
+#include "Timer.h"
 
 /**
  * Solve types
@@ -49,6 +50,7 @@ private:
   /* pointer to quadrature object */
   Quadrature* _quad;
   TimeStepper* _ts;
+  Timer* _timer;
 
   /* cmfd level */
   int _mesh_level;

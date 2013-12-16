@@ -121,13 +121,14 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 
     log_printf(INFO, "converging transient source");
 
+    _timer->startTimer();
+
     /* Counter for the number of iterations to converge the source */
     _num_iterations = 0;
 
     Mesh* mesh = _geometry->getMesh();
 
     double cmfd_k_eff;
-    //mesh->zeroDs();
 
     /* The residual on the source */
     FP_PRECISION residual = 0.0;
@@ -137,30 +138,50 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 		 "\tres = %1.3E", 0, _k_eff, _k_eff, residual);
     else
       log_printf(NORMAL, "Iter %d: \trho = $%1.4f"
-		 "\tres = %1.3E", 0, (_k_eff - mesh->getKeff0())/mesh->getKeff0()/mesh->getBetaSum(), residual);
+		 "\tres = %1.3E", 0, getReactivity(), residual);
 
 
     /* Fission source iteration loop */
     for (int i=0; i < max_iterations; i++) {
 
 	/* normalize the fluxes */
-	if (_geometry->getMesh()->getInitialState())
+        if (_geometry->getMesh()->getInitialState()){
+	    _timer->startTimer();
 	    normalizeFluxes();
+	    _timer->stopTimer();
+	    _timer->recordSplit("MOC normalize fluxes");
+	}
 
 	/* compute the new source */
+	_timer->startTimer();
 	residual = computeFSRSources();
+	_timer->stopTimer();
+	_timer->recordSplit("MOC compute sources");
 	
 	/* perform transport sweep */
-	transportSweep();	
+	_timer->startTimer();
+	transportSweep();
+	_timer->stopTimer();
+	_timer->recordSplit("MOC transport sweep");
 	
 	/* add source to scalar flux */
+	_timer->startTimer();
 	addSourceToScalarFlux();
+	_timer->stopTimer();
+	_timer->recordSplit("MOC add source to flux");
 	
 	/* update the flux with cmfd */
-	if (!(i >= 1 && residual < _source_convergence_thresh))    
+	if (!(i >= 1 && residual < _source_convergence_thresh)){    
+	    _timer->startTimer();
 	    cmfd_k_eff = _cmfd->computeKeff();
+	    _timer->stopTimer();
+	    _timer->recordSplit("CMFD solve");
+	}
 	
+	_timer->startTimer();
 	computeKeff();
+	_timer->stopTimer();
+	_timer->recordSplit("MOC compute keff");
 
 	_num_iterations++;
 
@@ -169,13 +190,14 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
 		     "\tres = %1.3E", _num_iterations, _k_eff, cmfd_k_eff, residual);
 	else
 	  log_printf(NORMAL, "Iter %d: \trho = $%1.4f"
-		     "\tres = %1.3E", _num_iterations, 
-		     (_k_eff - mesh->getKeff0())/mesh->getKeff0()/mesh->getBetaSum(), residual);
+		     "\tres = %1.3E", _num_iterations, getReactivity(), residual);
 
 	/* Check for convergence of the fission source distribution */
 	if (i >= 1 && residual < _source_convergence_thresh) {	    
 	  _cmfd->getMesh()->computeXS();
 	  _cmfd->getMesh()->computeDs(1.0);
+	  _timer->stopTimer();
+	  _timer->recordSplit("MOC solve");
 	  return _k_eff;
 	}
     }
@@ -232,7 +254,7 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
     double* velocity = mesh->getVelocity();
     double* frequency_new = mesh->getFrequencies(CURRENT);
     double* frequency_old = mesh->getFrequencies(PREVIOUS);
-    double old_flux, new_flux;
+    double old_flux;
     double dt = mesh->getDtMOC();
     TimeStepper* ts = mesh->getTimeStepper();
     
@@ -281,8 +303,6 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 		    method_source = 0.0;
 		    old_flux = fine_shape[r*_num_groups+G] * coarse_flux_old[i*_num_groups+G] 
 			* volumes[i] / velocity[G];
-		    new_flux = fine_shape[r*_num_groups+G] * coarse_flux_new[i*_num_groups+G] 
-			* volumes[i] / velocity[G];
 
 		    if (mesh->getTransientType() == THETA){
 		      method_source = 1.0/(velocity[G] * dt) * 
@@ -294,15 +314,6 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 			    / coarse_flux_old[i*_num_groups+G] / dt 
 			     - _scalar_flux(r,G) * (1.0 / dt + frequency_new[i*_num_groups+G]));
 		    }
-		    else if (mesh->getTransientType() == ADIABATIC){
-	                method_source = 1.0/(velocity[G] * dt) * 
-			  (old_flux * exp(frequency_new[i*_num_groups+G] * dt) 
-			   - _scalar_flux(r,G) * (1.0 + log(new_flux / old_flux)));
-		    }
-		    else{
-	                log_printf(ERROR, "To solve a transient problem you must " 
-	                                  "give a transient method!");
-                    }
 		    
 		    /* Set the total source for region r in group G */
 		    _source(r,G) = ((1.0 - mesh->getBetaSum()) * (1.0 / mesh->getKeff0()) 
@@ -312,8 +323,15 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 		    scat += scatter_source * ONE_OVER_FOUR_PI;
 		    delay += chi[G] * delayed_source * ONE_OVER_FOUR_PI;
 		    method += chi[G] * method_source * ONE_OVER_FOUR_PI;
-		    fis += (1.0 - mesh->getBetaSum()) * (1.0 / mesh->getKeff0()) 
-				    * fission_source * chi[G] * ONE_OVER_FOUR_PI;
+		    
+		    if (mesh->getTransientType() == ADIABATIC){
+		        fis += (1.0 - mesh->getBetaSum()) * (1.0 / _k_eff) 
+			  * fission_source * chi[G] * ONE_OVER_FOUR_PI;
+		    }
+		    else{
+		        fis += (1.0 - mesh->getBetaSum()) * (1.0 / mesh->getKeff0()) 
+			  * fission_source * chi[G] * ONE_OVER_FOUR_PI;
+		    }
 		}
 		else{
 		    /* Set the total source for region r in group G */
@@ -325,22 +343,13 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 		
 		_reduced_source(r,G) = _source(r,G) / sigma_t[G];
 		
-		//log_printf(NORMAL, "fsr: %i, group: %i, red source: %f", r, G, _reduced_source(r,G));
-		
 		/* Compute the norm of residual of the source in the region, group */
 		if (fabs(_source(r,G)) > 1E-10)
 		    _source_residuals(r,G) = pow((_source(r,G) - _old_source(r,G)) 
 						 / _source(r,G), 2);
 		
 		/* Update the old source */
-		_old_source(r,G) = _source(r,G);
-		
-		//if (fabs(scatter_source) > 1E-10)
-		//_source_residuals(r,G) = pow((scatter_source - _old_source(r,G)) 
-		//				     / scatter_source, 2);
-		
-		/* Update the old source */
-		//_old_source(r,G) = scatter_source;
+		_old_source(r,G) = _source(r,G);		
 	    }
 	}
     }
@@ -350,8 +359,6 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 						 _num_FSRs*_num_groups);
     source_residual = sqrt(source_residual / (_num_groups*_num_FSRs));
     
-    //log_printf(NORMAL, "fis: %f, scat: %f, method: %f, delay: %f", fis, scat, method, delay);
-
     return source_residual;
 }
 
@@ -526,78 +533,6 @@ void ThreadPrivateSolverTransient::transportSweep() {
 }
 
 
-void ThreadPrivateSolverTransient::transportPass() {
-
-    int tid;
-    int fsr_id;
-    Track* curr_track;
-    int azim_index;
-    int num_segments;
-    segment* curr_segment;    
-    segment* segments;
-    FP_PRECISION* track_flux;
-
-    log_printf(DEBUG, "Transport sweep with %d OpenMP threads", _num_threads);
-
-    if (_cmfd->getMesh()->getCmfdOn()) 
-      zeroSurfaceCurrents();
-
-    /* Loop over azimuthal angle halfspaces */
-    for (int i=0; i < 2; i++) {
-
-        /* Compute the minimum and maximum track IDs corresponding to 
-         * this azimuthal angular halfspace */
-        int min = i * (_tot_num_tracks / 2);
-	int max = (i + 1) * (_tot_num_tracks / 2);
-	
-	/* Loop over each thread within this azimuthal angle halfspace */
-	#pragma omp parallel for private(tid, fsr_id, curr_track, \
-	azim_index, num_segments, segments, curr_segment, \
-	track_flux) schedule(guided)
-	for (int track_id=min; track_id < max; track_id++) {
-
-	    tid = omp_get_thread_num();
-
-	    /* Initialize local pointers to important data structures */	
-	    curr_track = _tracks[track_id];
-	    azim_index = curr_track->getAzimAngleIndex();
-	    num_segments = curr_track->getNumSegments();
-	    segments = curr_track->getSegments();
-	    track_flux = &_boundary_flux(track_id,0,0,0);
-
-	    /* Loop over each segment in forward direction */
-	    for (int s=0; s < num_segments; s++) {
-	        curr_segment = &segments[s];
-		fsr_id = curr_segment->_region_id;
-		scalarFluxPass(curr_segment, azim_index, track_flux, 
-	                        &_thread_flux(tid,fsr_id,0),true);
-	    }
-
-	    /* Transfer flux to outgoing track */
-	    transferBoundaryFlux(track_id, azim_index, true, track_flux);
-	    
-	    /* Loop over each segment in reverse direction */
-	    track_flux += _polar_times_groups;
-	    
-	    for (int s=num_segments-1; s > -1; s--) {
-	        curr_segment = &segments[s];
-		fsr_id = curr_segment->_region_id;
-		scalarFluxPass(curr_segment, azim_index, track_flux, 
-	                        &_thread_flux(tid,fsr_id,0),false);
-	    }
-	    
-	    /* Transfer flux to outgoing track */
-	    transferBoundaryFlux(track_id, azim_index, false, track_flux);
-	}
-    }
-
-    if (_cmfd->getMesh()->getCmfdOn())
-      reduceThreadSurfaceCurrents();
-    
-    return;
-}
-
-
 /**
  * @brief Computes the contribution to the flat source region scalar flux
  *        from a single track segment.
@@ -678,75 +613,6 @@ void ThreadPrivateSolverTransient::scalarFluxTally(segment* curr_segment,
 }
 
 
-void ThreadPrivateSolverTransient::scalarFluxPass(segment* curr_segment, 
-	                                          int azim_index,
-	                                          FP_PRECISION* track_flux,
-					          FP_PRECISION* fsr_flux,
-					          bool fwd){
-
-    int tid = omp_get_thread_num();
-    int fsr_id = curr_segment->_region_id;
-    FP_PRECISION length = curr_segment->_length;
-    double* sigma_t = curr_segment->_material->getSigmaT();
-
-    /* The average flux along this segment in the flat source region */
-    FP_PRECISION deltapsi;
-    FP_PRECISION exponential;
-
-    /* Loop over energy groups */
-    for (int e=0; e < _num_groups; e++) {
-
-	/* Loop over polar angles */
-        for (int p=0; p < _num_polar; p++){
-            exponential = computeExponential(sigma_t[e], length, p);
-            deltapsi = (track_flux(p,e) - _reduced_source(fsr_id,e)) * exponential;
-	    track_flux(p,e) -= deltapsi;
-	}
-    }
-
-    if (_cmfd->getMesh()->getCmfdOn()){
-    	if (curr_segment->_mesh_surface_fwd != -1 && fwd){
-
-    		/* set polar angle * energy group to 0 */
-    		int pe = 0;
-
-    		/* loop over energy groups */
-    		for (int e = 0; e < _num_groups; e++) {
-
-    			/* loop over polar angles */
-    			for (int p = 0; p < _num_polar; p++){
-
-    				/* increment current (polar and azimuthal weighted flux, group)*/
-	                        _thread_currents(tid,curr_segment->_mesh_surface_fwd,e) += track_flux(p,e)*_polar_weights(azim_index, p)/2.0;
-
-    				pe++;
-    			}
-    		}
-    	}
-    	else if (curr_segment->_mesh_surface_bwd != -1 && !fwd){
-
-    		/* set polar angle * energy group to 0 */
-    		int pe = 0;
-
-    		/* loop over energy groups */
-    		for (int e = 0; e < _num_groups; e++) {
-
-    			/* loop over polar angles */
-    			for (int p = 0; p < _num_polar; p++){
-
-    				/* increment current (polar and azimuthal weighted flux, group)*/
-	                        _thread_currents(tid,curr_segment->_mesh_surface_bwd,e) += track_flux(p,e)*_polar_weights(azim_index, p)/2.0;
-
-    				pe++;
-    			}
-    		}
-    	}
-    }
-
-    return;
-}
-
-
 /**
  * @brief Reduces the flat source region scalar fluxes from private thread 
  *        array to a global array.
@@ -796,4 +662,18 @@ void ThreadPrivateSolverTransient::scaleTrackFlux(double scale_val){
 	    }
         }
     }
+}
+
+
+double ThreadPrivateSolverTransient::getReactivity(){
+
+  Mesh* mesh = _geometry->getMesh();
+  double reactivity = (_k_eff - mesh->getKeff0()) / mesh->getKeff0() / mesh->getBetaSum();
+
+  return reactivity;
+}
+
+
+int ThreadPrivateSolverTransient::getNumIters(){
+  return _num_iterations;
 }

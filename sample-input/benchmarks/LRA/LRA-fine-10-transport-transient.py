@@ -258,8 +258,8 @@ log.py_printf('NORMAL', 'Plotting data...')
 #plotter.plotMaterials(geometry, gridsize=500)
 #plotter.plotCells(geometry, gridsize=500)
 #plotter.plotFlatSourceRegions(geometry, gridsize=500)
-plotter.plotFluxes(geometry, solver, energy_groups=[1,2])
-plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
+#plotter.plotFluxes(geometry, solver, energy_groups=[1,2])
+#plotter.plotMeshFluxes(mesh, energy_groups=[1,2])
 
 log.py_printf('TITLE', 'Finished')
 

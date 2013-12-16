@@ -52,14 +52,9 @@ protected:
 			 FP_PRECISION* track_flux,
 			 FP_PRECISION* fsr_flux,
 			 bool fwd);
-    void scalarFluxPass(segment* curr_segment, int azim_index,
-			 FP_PRECISION* track_flux,
-			 FP_PRECISION* fsr_flux,
-			 bool fwd);
     void reduceThreadScalarFluxes();
     void reduceThreadSurfaceCurrents();
     void transportSweep();
-    void transportPass();
     virtual FP_PRECISION computeFSRSources();
 
 public:
@@ -74,6 +69,8 @@ public:
     void initialize();
     void scaleTrackFlux(double scale_val);
     void resetSegmentMaterials();
+    double getReactivity();
+    int getNumIters();
 };
 
 

@@ -33,6 +33,7 @@ Mesh::Mesh(solveType solve_type, bool cmfd_on, double relax_factor, int mesh_lev
   _solve_method = solve_type;
   _quad = new Quadrature(TABUCHI);
   _ts = NULL;
+  _timer = new Timer();
 
   /* initialize boundaries to be reflective */
   _boundaries = new boundaryType[4];
@@ -145,7 +146,7 @@ void Mesh::initialize(){
 void Mesh::computeXS(Mesh* geom_mesh, materialState state){
 
     log_printf(INFO, "computing cmfd cross sections...");
-    
+
     /* split the corner currents to the sides */
     splitCorners();
     
@@ -166,7 +167,9 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
     Material* cell_material;
    
     /* loop over mesh cells */
-#pragma omp parallel for private(volume, flux, abs, tot, nu_fis, chi, dif_coef, scat, abs_tally, nu_fis_tally, dif_tally, rxn_tally, vol_tally, tot_tally, scat_tally, iter, fsr_material, cell_material)
+    #pragma omp parallel for private(volume, flux, abs, tot, nu_fis, chi, \
+     dif_coef, scat, abs_tally, nu_fis_tally, dif_tally, rxn_tally, \
+     vol_tally, tot_tally, scat_tally, iter, fsr_material, cell_material)
     for (int i = 0; i < _cells_x * _cells_y; i++){
 	
 	/* loop over energy groups */
@@ -275,8 +278,8 @@ void Mesh::computeDs(double relax_factor, materialState state){
     log_printf(INFO, "computing cmfd Ds...");
     
     /* initialize variables */
-    double d = 0, d_next = 0, d_hat = 0, d_tilde = 0;
-    double current = 0, flux = 0, flux_next = 0, f = 1, f_next = 1;
+    double d, d_next , d_hat , d_tilde;
+    double current, flux, flux_next, f, f_next;
     double length, length_perpen, next_length_perpen;
     double sense;
     int next_surface;
@@ -285,6 +288,9 @@ void Mesh::computeDs(double relax_factor, materialState state){
     double* fluxes = getFluxes(state);
     
     /* loop over mesh cells in y direction */
+    #pragma omp parallel for private(d, d_next, d_hat, d_tilde, current, flux, \
+      flux_next, f, f_next, length, length_perpen, next_length_perpen, sense, \
+      next_surface, cell, cell_next)    
     for (int y = 0; y < _cells_y; y++){
 	
 	/* loop over mesh cells in x direction */
@@ -454,6 +460,8 @@ void Mesh::updateMOCFlux(){
 
     log_printf(INFO, "Updating MOC flux...");
     
+    _timer->startTimer();
+    
     /* initialize variables */
     std::vector<int>::iterator iter;
     double* old_flux = getFluxes(FSR_OLD);
@@ -481,6 +489,9 @@ void Mesh::updateMOCFlux(){
 	    }
 	}
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Update MOC flux");
 }
 
 
@@ -560,6 +571,8 @@ void Mesh::computeFineShape(double* geom_shape, double* mesh_flux){
     int cell;
     int ng = _num_groups;
 
+    _timer->startTimer();
+
     /* set volume of mesh cells */
     #pragma omp parallel for private(cell, iter)
     for (int y = 0; y < _cells_y; y++){
@@ -574,6 +587,9 @@ void Mesh::computeFineShape(double* geom_shape, double* mesh_flux){
 	    }
 	}
     }
+    
+    _timer->stopTimer();
+    _timer->recordSplit("Compute fine shape");
 }
 
 
@@ -582,6 +598,8 @@ void Mesh::reconstructFineFlux(double* geom_shape, double* geom_flux, double* me
     std::vector<int>::iterator iter;
     int cell;
     int ng = _num_groups;
+
+    _timer->startTimer();
     
     /* set volume of mesh cells */
     #pragma omp parallel for private(iter, cell)
@@ -593,6 +611,9 @@ void Mesh::reconstructFineFlux(double* geom_shape, double* geom_flux, double* me
 	    }
 	}
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Reconstruct fine flux");
 }
 
 
@@ -1476,32 +1497,44 @@ void Mesh::createNewFrequency(materialState state){
 
 void Mesh::copyFlux(materialState from_state, materialState to_state){
 
+    _timer->startTimer();
+
     if (from_state != FSR && to_state != FSR){
 	double* from_flux = _fluxes.at(from_state);
 	double* to_flux = _fluxes.at(to_state);
+        #pragma omp parallel for
 	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
 	    to_flux[i] = from_flux[i];
     }
     else if (to_state == FSR){
 	double* from_flux = _fluxes.at(from_state);
+        #pragma omp parallel for
 	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
 	    _FSR_fluxes[i] = from_flux[i];
     }
     else{
 	double* to_flux = _fluxes.at(to_state);
-	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++){
+        #pragma omp parallel for
+	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
 	    to_flux[i] = _FSR_fluxes[i];
-	}
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Copy flux");
 }
 
 
 void Mesh::copyFrequency(materialState from_state, materialState to_state){
 
+  _timer->startTimer();
+
   double* from_flux = _frequency.at(from_state);
   double* to_flux = _frequency.at(to_state);
   for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
     to_flux[i] = from_flux[i];
+
+  _timer->stopTimer();
+  _timer->recordSplit("Copy frequency");
 }
 
 
@@ -1510,12 +1543,17 @@ void Mesh::copyDs(materialState from_state, materialState to_state){
     double* dif_tilde;
     int ngs = 4*_num_groups;
 
+    _timer->startTimer();
+
     for (int i = 0; i < _cells_x*_cells_y; i++){
 	dif_tilde = _materials[i]->getDifTilde();
 	
 	for (int gs = 0; gs < ngs; gs++)
 	    dif_tilde[int(to_state)*ngs + gs] = dif_tilde[int(from_state)*ngs + gs];
     }
+    
+    _timer->stopTimer();
+    _timer->recordSplit("Copy Ds");
 }
 
 
@@ -1702,6 +1740,8 @@ void Mesh::interpolateDs(double ratio){
     double* dif_tilde;
     double slope;
 
+    _timer->startTimer();
+
     /* loop over mesh cells in y direction */
     for (int i = 0; i < _cells_y * _cells_x; i++){
 	dif_tilde = _materials[i]->getDifTilde();
@@ -1712,10 +1752,15 @@ void Mesh::interpolateDs(double ratio){
 	    dif_tilde[int(CURRENT)*ngs+gs] = dif_tilde[int(PREVIOUS_CONV)*ngs+gs] + ratio * slope;
 	}
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Interpolate Ds");
 }
 
 
 void Mesh::interpolateFlux(double ratio){
+
+    _timer->startTimer();
 
     double* fwd_flux = getFluxes(FORWARD);
     double* pre_flux = getFluxes(PREVIOUS_CONV);
@@ -1727,6 +1772,10 @@ void Mesh::interpolateFlux(double ratio){
 	slope = fwd_flux[i] - pre_flux[i];
 	cur_flux[i] = pre_flux[i] + ratio * slope;
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Interpolate flux");
+
 }
 
 

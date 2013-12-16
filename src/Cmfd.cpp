@@ -76,10 +76,6 @@ double Cmfd::computeKeff(){
 
     log_printf(INFO, "Running CMFD diffusion solver...");
     
-    /* if solving diffusion problem, initialize timer */
-    if (_solve_method == DIFFUSION)
-	_timer->startTimer();
-    
     /* initialize variables */
     double sumnew = 0.0;
     double sumold = 0.0;
@@ -90,22 +86,37 @@ double Cmfd::computeKeff(){
     int method = 1;
     double balance;
 
-    if (_solve_method == MOC)
+    if (_solve_method == MOC){
+        _timer->startTimer();
 	_mesh->computeXS();
+	_timer->stopTimer();
+	_timer->recordSplit("CMFD compute XS");
+    }
     else
 	_timer->startTimer();
 
+    _timer->startTimer();
     _mesh->computeDs();
+    _timer->stopTimer();
+    _timer->recordSplit("CMFD compute Ds");
 
     _phi_old = _mesh->getFluxes(FSR_OLD);
     _mesh->copyFlux(FSR_OLD, CURRENT);
     _phi_new = _mesh->getFluxes(CURRENT);
     
+    _timer->startTimer();
     constructMatrices();
+    _timer->stopTimer();
+    _timer->recordSplit("CMFD construct matrices");
 
     if (_mesh->getInitialState() == false){
+
       matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
+
+      _timer->startTimer();
       linearSolveRB(_AM, _phi_new, _b, _phi_temp, _conv_criteria, _omega, _cx, _cy, _ng, 10000);
+      _timer->stopTimer();
+      _timer->recordSplit("CMFD linear solve");
 
     }
     else{
@@ -126,9 +137,12 @@ double Cmfd::computeKeff(){
 	    while (norm > _conv_criteria){
 		
 		/* Solver phi = A^-1 * old_source */
-		vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
+	        vecWAXPY(_b_prime, 1.0, _snew, _b, _nc);
+		_timer->startTimer();
 		linearSolveRB(_A, _phi_new, _b_prime, _phi_temp, conv, _omega, _cx, _cy, _ng, 1000);
-		
+		_timer->stopTimer();
+		_timer->recordSplit("CMFD linear solve");
+
 		/* compute new source */
 		matMultM(_M, _phi_new, _snew, _cx*_cy, _ng);
 		
@@ -323,7 +337,7 @@ void Cmfd::rescaleFlux(){
 void Cmfd::constructMatrices(){
 
     log_printf(INFO,"Constructing matrices...");
-    
+
     double value;
     int cell;
     int row;
@@ -380,22 +394,11 @@ void Cmfd::constructMatrices(){
 		    }
 		    else if (_mesh->getTransientType() == MAF){
 
-		        _b[row] = _mesh->getFluxes(PREVIOUS)[row] 
+		        _b[row] = _mesh->getFluxes(PREVIOUS_CONV)[row] 
 			  / (velocity[e] * dt) * volumes[cell]; 
 
 			value = volumes[cell] / velocity[e] * (1.0 / dt + frequency_new[row]); 
 			_A[row*(_ng+4)+e+2] += value;
-		    }
-		    else if (_mesh->getTransientType() == ADIABATIC){
-
-			_b[row] = flux_old[row] / (velocity[e] * dt) *
-			  exp(frequency_new[row] * dt) 
-			  * volumes[cell]; 
-	
-			value = volumes[cell] / (velocity[e] * dt) 
-			    * (1.0 + log(_mesh->getFluxes(PREVIOUS)[row] / flux_old[row])); 
-			_A[row*(_ng+4)+e+2] += value;
-
 		    }
 
 		    /* delayed source */
@@ -512,8 +515,7 @@ void Cmfd::constructMatrices(){
 	}
     }
 
-    log_printf(INFO,"Done constructing matrices...");  
-    
+    log_printf(INFO,"Done constructing matrices...");      
 }
 
 

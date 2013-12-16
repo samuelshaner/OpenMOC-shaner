@@ -42,9 +42,6 @@ private:
     double _k_eff_0;
     double _start_time;
     double _end_time;
-    std::vector<double> _temp;
-    std::vector<double> _power;
-    std::vector<double> _time;
     double _power_factor;
     solveType _solve_method;
     transientType _transient_method;
@@ -54,7 +51,24 @@ private:
     double _nu;
     double _kappa;
     double _alpha;
-    
+
+    std::vector<double> _temp_core;
+    std::vector<double> _power_core;
+    std::vector<double> _time_tcmfd;
+    std::vector<double> _temp_peak;
+    std::vector<double> _power_peak;
+    std::vector<double> _time_moc;
+    std::vector<int> _num_amp_solves;
+    std::vector<double> _reactivity;
+    std::vector<int> _moc_iters;
+    std::string _log_file;
+
+    double _temp_peak_value;
+    double _power_peak_value;
+
+    /* global counters */
+    int _amp_solve_counter;
+
     
 public:
     TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd,
@@ -76,9 +90,11 @@ public:
     void updatePrecursorConc();
     void initializeTimeStepper();
     void initializeTransientMaterials();
+    void initializeTransientLogfile();
     void solveInitialState();
     void solveOuterStep();
     void mapPrecConc();
+    void logStep();
     
     /* setters */
     void setDtMOC(double dt);

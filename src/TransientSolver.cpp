@@ -19,6 +19,9 @@ TransientSolver::TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd, Solve
     _solve_method = _mesh->getSolveType();
     _ng = _geom->getNumEnergyGroups();
     _timer = new Timer();
+    _temp_peak_value = 0.0;
+    _power_peak_value = 0.0;
+    _amp_solve_counter = 0;
     
     /* compute the volume of the core */
     computeVolCore();
@@ -48,9 +51,13 @@ void TransientSolver::solveInitialState(){
 
     log_printf(NORMAL, "Solving time dependent problem...");
 
+    /* start timer for global solve */
+    _timer->startTimer();
+
     /* initialize the time stepper and transient material properties */
     initializeTimeStepper();
     initializeTransientMaterials();
+    initializeTransientLogfile();
     sync(CURRENT);
 
     /* compute initial shape function */
@@ -69,7 +76,6 @@ void TransientSolver::solveInitialState(){
         static_cast<ThreadPrivateSolverTransient*>(_solver)->resetSegmentMaterials();        
 	_k_eff_0 = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);    
 	_mesh->setKeff0(_k_eff_0);
-	//_mesh->setRelaxFactor(1.0);
 	_cmfd->checkNeutronBalance();
 
 	/* compute fine mesh flux shape */
@@ -111,10 +117,18 @@ void TransientSolver::solveInitialState(){
     _tcmfd->setInitialState(false);
     
     /* save initial global parameters */
-    _time.push_back(0.0);
-    _temp.push_back(computeCoreTemp());
-    _power.push_back(computePower());
-    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f", _time.back(), _power.back(), _temp.back());  
+    _num_amp_solves.push_back(0);
+    _time_tcmfd.push_back(0.0);
+    _time_moc.push_back(0.0);
+    _temp_core.push_back(computeCoreTemp());
+    _power_core.push_back(computePower());
+    _power_peak.push_back(_power_peak_value);
+    _temp_peak.push_back(_temp_peak_value);
+    _reactivity.push_back(static_cast<ThreadPrivateSolverTransient*>(_solver)->getReactivity());
+    _moc_iters.push_back(static_cast<ThreadPrivateSolverTransient*>(_solver)->getNumIters());
+    logStep();
+    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f", 
+	       _time_tcmfd.back(), _power_core.back(), _temp_core.back());  
 }
 
 
@@ -123,22 +137,18 @@ void TransientSolver::solveOuterStep(){
     /* set time integration parameters */
     double tolerance_in = 1.e-7;
     double tolerance_out = 1.e-6;
-    int length_conv;
     double residual_out = 1.0;
     double residual_in = 1.0;
     int iter = 0;
     double k_eff;
     int iter_outer = 0;
-    double old_power = _power.back();
-
-    if (_ts->getTime(CURRENT) == _start_time)
-	_timer->startTimer();
+    double old_power = _power_core.back();
     
     if (_solve_method == MOC){
 	
 	/* reset outer loop residual */
 	residual_out = 1.0;
-	int len_conv = _power.size();
+	int len_conv = _power_core.size();
 
 	/* converge the source on the outer time step fine mesh */
 	while (residual_out > tolerance_out){
@@ -178,23 +188,29 @@ void TransientSolver::solveOuterStep(){
 		/* take outer step */
 		while (residual_in > tolerance_in){
 		    _mesh->copyFlux(CURRENT, FORWARD);
+		    _timer->startTimer();
 		    _tcmfd->solveTCMFD();
+		    _timer->stopTimer();
+		    _timer->recordSplit("TCMFD solve");
 		    updateTemperatures();
 		    updatePrecursorConc();
 		    sync(CURRENT);
 		    residual_in = computeResidual(DIFFUSION);
 		    iter++;
-		}	
+		}
 		
 		/* copy the coarse mesh flux from CURRENT to PREVIOUS */
 		_mesh->copyFlux(CURRENT, PREVIOUS);
 		copyFieldVariables(CURRENT, PREVIOUS);
 	
 		/* compute and save the power, temp, and time */
-		_time.push_back(_ts->getTime(CURRENT));
-		_temp.push_back(computeCoreTemp());
-		_power.push_back(computePower());
-		log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  		
+		_num_amp_solves.push_back(iter);
+		_time_tcmfd.push_back(_ts->getTime(CURRENT));
+		_temp_core.push_back(computeCoreTemp());
+		_power_core.push_back(computePower());
+		_power_peak.push_back(_power_peak_value);
+		_temp_peak.push_back(_temp_peak_value);
+		log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time_tcmfd.back(), _power_core.back(), _temp_core.back(), iter);  		
 	    }
 
 	    /* compute frequencies */
@@ -204,7 +220,7 @@ void TransientSolver::solveOuterStep(){
 	    if (residual_out == 1.0){
 	        log_printf(NORMAL, "Prolongating MOC flux");
 	    	_mesh->updateMOCFlux();
-		static_cast<ThreadPrivateSolverTransient*>(_solver)->scaleTrackFlux(_power.back() / old_power);
+		static_cast<ThreadPrivateSolverTransient*>(_solver)->scaleTrackFlux(_power_core.back() / old_power);
 	    }
 
 	    /* compute new shape function and check for outer loop convergence */
@@ -212,13 +228,26 @@ void TransientSolver::solveOuterStep(){
 	    _mesh->copyFlux(FSR_OLD, CURRENT);
 
 	    /* compute the fine shape */
-	    _mesh->computeFineShape(_geom_mesh->getFluxes(CURRENT), _mesh->getFluxes(CURRENT));
+	    _mesh->computeFineShape(_geom_mesh->getFluxes(FORWARD), _mesh->getFluxes(CURRENT));
+	    //sync(CURRENT);
+
+	    /* if ADIABATIC method, renormalize coarse mesh flux */
+	    if (_transient_method == ADIABATIC){
+	      vecScale(_mesh->getFluxes(CURRENT), _power_core.back() / computePower(), 
+		       _ng*_mesh->getNumCells()); 
+	    }
 
 	    /* compute and print residual */
 	    residual_out = computeResidual(MOC);
 	    log_printf(NORMAL, "tolerance: %1.3E, resid out: %1.3E", tolerance_out, residual_out);
 
 	    iter_outer++;
+
+	    /* output to logfile */
+	    _reactivity.push_back(static_cast<ThreadPrivateSolverTransient*>(_solver)->getReactivity());
+	    _moc_iters.push_back(static_cast<ThreadPrivateSolverTransient*>(_solver)->getNumIters());
+	    logStep();
+
 	}
 
 	/* copy converged field variables */
@@ -243,7 +272,10 @@ void TransientSolver::solveOuterStep(){
 	    /* take outer step */
 	    while (residual_in > tolerance_in){
 		_mesh->copyFlux(CURRENT, FORWARD);
+		_timer->startTimer();
 		_tcmfd->solveTCMFD();
+		_timer->stopTimer();
+		_timer->recordSplit("TCMFD solve");
 		updateTemperatures();
 		updatePrecursorConc();
 		sync(CURRENT);
@@ -254,10 +286,10 @@ void TransientSolver::solveOuterStep(){
 	    copyFieldVariables(CURRENT, PREVIOUS);
   
 	    /* compute and save the power, temp, and time */
-	    _time.push_back(_ts->getTime(CURRENT));
-	    _temp.push_back(computeCoreTemp());
-	    _power.push_back(computePower());
-	    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time.back(), _power.back(), _temp.back(), iter);  	    
+	    _time_tcmfd.push_back(_ts->getTime(CURRENT));
+	    _temp_core.push_back(computeCoreTemp());
+	    _power_core.push_back(computePower());
+	    log_printf(NORMAL, "TIME: %f, POWER: %.10f, TEMP: %f, ITER: %i", _time_tcmfd.back(), _power_core.back(), _temp_core.back(), iter);  	    
 	}
 	
 	_ts->convergedMOCStep();
@@ -268,6 +300,7 @@ void TransientSolver::solveOuterStep(){
 	log_printf(TITLE, "TIMING REPORT");
 	_timer->stopTimer();
 	_timer->recordSplit("Total time to solve transient problem");
+        _timer->printSplits();
 	
 	double tot_time = _timer->getSplit("Total time to solve transient problem");
 	msg_string = "Total time to solve transient problem";
@@ -278,6 +311,8 @@ void TransientSolver::solveOuterStep(){
 
 
 double TransientSolver::computeResidual(solveType solve_type){
+
+    _timer->startTimer();
     
     double res = 0.0;
     double source = 0.0;
@@ -322,11 +357,16 @@ double TransientSolver::computeResidual(solveType solve_type){
 	res = pow(res, 0.5);
 	res = res / (_mesh->getNumCells() * _ng);
     }
-        
+    
+    _timer->stopTimer();
+    _timer->recordSplit("Computing residual");
+    
     return res;
 }
 
 void TransientSolver::copyFieldVariables(materialState state_from, materialState state_to){
+  
+    _timer->startTimer();
 
     copyTemperature(state_from, state_to);
     copyPrecConc(state_from, state_to);
@@ -335,6 +375,9 @@ void TransientSolver::copyFieldVariables(materialState state_from, materialState
 	_geom_mesh->copyFlux(state_from, state_to);
     else
 	_mesh->copyFlux(state_from, state_to);
+
+    _timer->stopTimer();
+    _timer->recordSplit("Copying field variables");
 }
 
 
@@ -353,11 +396,14 @@ void TransientSolver::copyTemperature(materialState state_from, materialState st
 
 void TransientSolver::trimVectors(int len_conv){
 
-    int len_curr = _power.size();
+    int len_curr = _power_core.size();
     for (int i = len_conv; i < len_curr; i++){
-	_time.pop_back();
-	_power.pop_back();
-	_temp.pop_back();
+	_time_tcmfd.pop_back();
+	_power_core.pop_back();
+	_temp_core.pop_back();
+	_temp_peak.pop_back();
+	_power_peak.pop_back();
+	_num_amp_solves.pop_back();
     }
 }
 
@@ -366,6 +412,8 @@ void TransientSolver::trimVectors(int len_conv){
 void TransientSolver::updateTemperatures(){
 
     log_printf(INFO, "Performing temperature feedback...");
+
+    _timer->startTimer();
     
     /* initialize variables */
     double power_old, power_new, power, temp;
@@ -431,6 +479,9 @@ void TransientSolver::updateTemperatures(){
 	    materials[i]->setTemperature(CURRENT, temp);		
 	}	
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Updating temperature");
 }
 
 
@@ -439,26 +490,41 @@ void TransientSolver::updateTemperatures(){
 double TransientSolver::computeCoreTemp(){
 
     log_printf(INFO, "Computing core temperature...");
+
+    _timer->startTimer();
     
     double geom_temp = 0.0;
+    _temp_peak_value = 0.0;
 
     if (_solve_method == MOC){
 	/* loop over mesh cells */
 	for (int i = 0; i < _geom_mesh->getNumCells(); i++){    
-	    if (_geom_mesh->getMaterials()[i]->isFissionable())
-		geom_temp += _geom_mesh->getMaterials()[i]->getTemperature(CURRENT) * _geom_mesh->getVolumes()[i];
+	    if (_geom_mesh->getMaterials()[i]->isFissionable()){
+		geom_temp += _geom_mesh->getMaterials()[i]->getTemperature(CURRENT) * 
+		  _geom_mesh->getVolumes()[i];
+		_temp_peak_value = std::max(_temp_peak_value, 
+					    _geom_mesh->getMaterials()[i]->getTemperature(CURRENT));
+	    }
 	}
     }
     else{
 	/* loop over mesh cells */
 	for (int i = 0; i < _mesh->getNumCells(); i++){    
-	    if (_mesh->getMaterials()[i]->isFissionable())
-		geom_temp += _mesh->getMaterials()[i]->getTemperature(CURRENT) * _mesh->getVolumes()[i];
+	    if (_mesh->getMaterials()[i]->isFissionable()){
+	        geom_temp += _mesh->getMaterials()[i]->getTemperature(CURRENT) * 
+		  _mesh->getVolumes()[i];
+		_temp_peak_value = std::max(_temp_peak_value, 
+					    _mesh->getMaterials()[i]->getTemperature(CURRENT));
+
+	    }
 	}
     }
         
     geom_temp = geom_temp / _vol_core;
     
+    _timer->stopTimer();
+    _timer->recordSplit("Computing core temp");
+
     return geom_temp;
 }
 
@@ -549,6 +615,8 @@ void TransientSolver::initializePrecursorConc(){
 void TransientSolver::updatePrecursorConc(){
 
     log_printf(INFO, "Updating precursor concentrations...");
+
+    _timer->startTimer();
     
     /* initialize variables */
     double power_new, power_old, old_conc, new_conc, k1, k2, k3;   
@@ -644,11 +712,16 @@ void TransientSolver::updatePrecursorConc(){
 	    }
 	}	
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Updating precursor concentration");
 }
 
 
 /* map the precursor concentration fron the geometry mesh to the CMFD mesh */
 void TransientSolver::mapPrecConc(){
+
+    _timer->startTimer();
 
     double prec_conc;
     
@@ -679,6 +752,9 @@ void TransientSolver::mapPrecConc(){
 	    }
 	}
     }    
+
+    _timer->stopTimer();
+    _timer->recordSplit("Mapping precursor concentration");
 }
 
 
@@ -686,6 +762,8 @@ void TransientSolver::mapPrecConc(){
 double TransientSolver::computePower(materialState state){
 
     log_printf(INFO, "Computing power...");
+
+    _timer->startTimer();
     
     double power = 0.0;
  
@@ -697,13 +775,23 @@ double TransientSolver::computePower(materialState state){
 	double* fine_volumes = _geom_mesh->getVolumes();
 	double* velocity = _mesh->getVelocity();
 	Material** materials = _geom_mesh->getMaterials();
-		
+	double power_cell;
+	_power_peak_value = 0.0;
+	
 	for (int i = 0; i < _mesh->getNumCells(); i++){
-	    for (iter = _mesh->getCellFSRs()->at(i).begin(); iter != _mesh->getCellFSRs()->at(i).end(); ++iter){	   
-		for (int e = 0; e < _ng; e++)
+	    for (iter = _mesh->getCellFSRs()->at(i).begin(); 
+		 iter != _mesh->getCellFSRs()->at(i).end(); ++iter){	 
+	        power_cell = 0.0;
+	        for (int e = 0; e < _ng; e++){
 		    power += _kappa / _nu * materials[*iter]->getNuSigmaF()[e]
 			* fine_shape[*iter*_ng + e] * coarse_flux[i*_ng+e] * volumes[i] 
 			/ velocity[e] * fine_volumes[*iter];
+		    power_cell += _kappa / _nu * materials[*iter]->getNuSigmaF()[e]
+			* fine_shape[*iter*_ng + e] * coarse_flux[i*_ng+e] 
+			/ velocity[e] * fine_volumes[*iter];
+		}
+
+		_power_peak_value = std::max(_power_peak_value, power_cell); 
 	    }
 	}	    
     }
@@ -712,15 +800,21 @@ double TransientSolver::computePower(materialState state){
 	double* volumes = _mesh->getVolumes();
 	
 	for (int i = 0; i < _mesh->getNumCells(); i++){
-	    for (int e = 0; e < _ng; e++)
-		power += _kappa / _nu * _mesh->getMaterials()[i]->getNuSigmaF()[e]
-		    * flux[i*_ng + e] * volumes[i];
+	    for (int e = 0; e < _ng; e++){
+	        power += _kappa / _nu * _mesh->getMaterials()[i]->getNuSigmaF()[e]
+		  * flux[i*_ng + e] * volumes[i];
+		_power_peak_value = std::max(_power_peak_value, _kappa / _nu * flux[i*_ng + e]
+					     * _mesh->getMaterials()[i]->getNuSigmaF()[e]);  
+	    }
 	}
     }
     
     log_printf(DEBUG, "core power: %f, core power density: %f", power, power / _vol_core);	
     
     power = power / _vol_core;
+
+    _timer->stopTimer();
+    _timer->recordSplit("Computing power");
     
     return power;
 }
@@ -770,6 +864,80 @@ void TransientSolver::initializeTransientMaterials(){
     }
     
     log_printf(NORMAL, "done initializing transient materials...");
+}
+
+
+void TransientSolver::initializeTransientLogfile(){
+
+  /* set logfile name */
+  _log_file = std::string(getLogfileName());
+  _log_file.resize(_log_file.length()-4);
+  _log_file.append("-transient.log");
+
+  /* open file */
+  std::ofstream logfile;
+  logfile.open((std::string(getOutputDirectory()) + "/" + _log_file).c_str(), std::ios::app);
+  logfile << "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -" << std::endl;
+  logfile << "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -" << std::endl;
+  logfile << "- - - - - - - - - TRANSIENT OUTPUT FILE - - - - - - - - - -" << std::endl;
+  logfile << "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -" << std::endl;
+  logfile << "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -" << std::endl;
+  
+  /* write trial summary */
+  logfile << "Number of fine mesh cells   = " << _geom_mesh->getNumCells() << std::endl;
+  logfile << "Number of coarse mesh cells = " << _mesh->getNumCells() << std::endl;
+
+  if (_solve_method == DIFFUSION)
+    logfile << "Shape fct method            = DIFFUSION" << std::endl;
+  else{
+    logfile << "Shape fct method            = MOC" << std::endl;
+    if (_transient_method == MAF)
+      logfile << "Transient method            = MAF" << std::endl;
+    else if (_transient_method == ADIABATIC)
+      logfile << "Transient method            = ADIABATIC" << std::endl;
+    if (_transient_method == THETA)
+      logfile << "Transient method            = THETA" << std::endl;
+  }
+  
+  logfile << "Time step size inner        = " << _dt_cmfd << " s " << std::endl;
+  logfile << "Time step size outer        = " << _dt_moc << " s " << std::endl;
+
+  /* write file heading */
+  logfile << std::endl;
+  logfile << "Time (s)\tCore Power\tPeak Power\tCore Temp (C)\tPeak Temp (C)\t# Amp Solves\t# MOC iters\tReactivity ($)" << std::endl;
+  
+  logfile.close();
+}
+
+
+void TransientSolver::logStep(){
+
+  /* open file */
+  std::ofstream logfile;
+  logfile.open((std::string(getOutputDirectory()) + "/" + _log_file).c_str(), std::ios::app);
+  logfile.precision(5);
+  logfile << std::scientific;
+  int num_steps = round(_dt_moc / _dt_cmfd);
+  int i = 0;
+
+  if (_num_amp_solves.size() > 1)
+    i = _num_amp_solves.size() - num_steps;
+
+  if (_num_amp_solves.size() > 1){
+    for (i = _num_amp_solves.size() - num_steps; i < _num_amp_solves.size()-1; i++){
+      logfile << _time_tcmfd.at(i) << "\t" << _power_core.at(i) << "\t" << _power_peak.at(i) 
+	      << "\t"  << _temp_core.at(i) << "\t" << _temp_peak.at(i) << "\t" << _num_amp_solves.at(i)
+	      << "\t\t-\t\t-\t\t" << std::endl;
+    }
+  }
+
+  /* write final line */
+  logfile << _time_tcmfd.at(i) << "\t" << _power_core.at(i) << "\t" << _power_peak.at(i) 
+	  << "\t" << _temp_core.at(i) << "\t" << _temp_peak.at(i) << "\t" << _num_amp_solves.at(i) 
+	  << "\t\t" << _moc_iters.back() << "\t\t" << _reactivity.back() << std::endl;
+
+  /* close file */
+  logfile.close();
 }
 
 
@@ -865,6 +1033,8 @@ void TransientSolver::setPowerInit(double power){
 
 void TransientSolver::sync(materialState state){
 
+    _timer->startTimer();
+
     if (_solve_method == MOC){
         #pragma omp parallel for
 	for (int i = 0; i < _geom_mesh->getNumCells(); i++){
@@ -887,19 +1057,22 @@ void TransientSolver::sync(materialState state){
 	    }
 	}	
     }
+
+    _timer->stopTimer();
+    _timer->recordSplit("Syncing");
 }
 
 
 double TransientSolver::getPower(){
-    return _power.back();
+    return _power_core.back();
 }
 
 
 double TransientSolver::getTemp(){
-    return _temp.back();
+    return _temp_core.back();
 }
 
 
 double TransientSolver::getTime(){
-    return _time.back();
+    return _time_tcmfd.back();
 }

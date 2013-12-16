@@ -101,16 +101,26 @@ void Tcmfd::solveTCMFD(){
     //checkNeutronBalance();
 
     /* construct matrices */
+    _timer->startTimer();
     constructMatrices();
+    _timer->stopTimer();
+    _timer->recordSplit("TCMFD construct matrices");
 
     /* reconstruct _AM */
+    _timer->startTimer();
     matSubtract(_AM, _A, 1.0, _M, _cells_x, _cells_y, _num_groups);
+    _timer->stopTimer();
+    _timer->recordSplit("TCMFD subtract matrices");
    
     //checkNeutronBalance2();
 
     /* solve inverse system */
+    _timer->startTimer();
     linearSolveRB(_AM, _phi_new, _b, _phi_temp, _conv_criteria, 
 		  _omega, _cells_x, _cells_y, _num_groups, 10000);
+    _timer->stopTimer();
+    _timer->recordSplit("TCMFD linear system solve");
+
 }
 
 

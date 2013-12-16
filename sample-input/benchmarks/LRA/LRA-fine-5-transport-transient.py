@@ -16,7 +16,7 @@ max_iters = options.max_iters
 relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
-dt_cmfd = 1.e-3
+dt_cmfd = 1.e-4
 dt_moc  = 1.e-2
 log.setLogLevel('NORMAL')
 
@@ -190,7 +190,7 @@ track_generator.generateTracks()
 
 log.py_printf('NORMAL', 'Creating cmfd...')
 
-cmfd = Cmfd(geometry)
+cmfd = Cmfd(geometry, 1e-9)
 cmfd.setOmega(1.5)
 
 ###############################################################################
@@ -204,7 +204,7 @@ solver.setNumThreads(num_threads)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.initialize()
 
-tcmfd = Tcmfd(geometry)
+tcmfd = Tcmfd(geometry, 1e-9)
 tcmfd.setOmega(1.5)
 tcmfd.setLambda([0.0654, 1.35])
 tcmfd.setBeta([0.0054, 0.001087])
