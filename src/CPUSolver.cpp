@@ -801,7 +801,7 @@ void CPUSolver::flattenFSRFluxes(FP_PRECISION value) {
 		 int pe = 0;
 
 		 /* Atomically increment the meshSurface current from the temporary array */
-		 omp_set_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_fwd % _geometry->getMesh()->getNumCurrents()]);
+		 omp_set_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_fwd]);
 
 		 /* loop over energy groups */
 		 for (int e = 0; e < _num_groups; e++) {
@@ -817,7 +817,7 @@ void CPUSolver::flattenFSRFluxes(FP_PRECISION value) {
 		 }
 
 		 /* Release mesh surface lock */
-	     omp_unset_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_fwd % _geometry->getMesh()->getNumCurrents()]);
+	     omp_unset_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_fwd]);
 
 	 }
 	 else if (curr_segment->_mesh_surface_bwd != -1 && !fwd){
@@ -826,7 +826,7 @@ void CPUSolver::flattenFSRFluxes(FP_PRECISION value) {
 		 int pe = 0;
 
 		 /* Atomically increment the meshSurface current from the temporary array */
-		 omp_set_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_bwd % _geometry->getMesh()->getNumCurrents()]);
+		 omp_set_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_bwd]);
 
 		 /* loop over energy groups */
 		 for (int e = 0; e < _num_groups; e++) {
@@ -842,7 +842,7 @@ void CPUSolver::flattenFSRFluxes(FP_PRECISION value) {
 		 }
 
 		 /* Release mesh surface lock */
-		 omp_unset_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_bwd % _geometry->getMesh()->getNumCurrents()]);
+		 omp_unset_lock(&_mesh_surface_locks[curr_segment->_mesh_surface_bwd]);
 	 }
      }
 

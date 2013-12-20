@@ -37,6 +37,9 @@ TransientSolver::TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd, Solve
 	_geom_mesh->createNewFlux(CURRENT);
 	_geom_mesh->createNewFlux(PREVIOUS_CONV);
 	_geom_mesh->createNewFlux(PREVIOUS);
+	_mesh->createNewCurrent(PREVIOUS_CONV);
+	_mesh->createNewCurrent(CURRENT);
+	_mesh->createNewCurrent(FORWARD);
     }
 }
 
@@ -88,11 +91,12 @@ void TransientSolver::solveInitialState(){
 	vecScale(_mesh->getFSRFluxes(), _power_factor, _geom_mesh->getNumCells()*_ng);
 	_mesh->copyFlux(CURRENT, FSR_OLD);
 
-	/* copy flux and D_cor's to PREVIOUS and PREVIOUS_CONV */
+	/* copy flux and current to PREVIOUS and PREVIOUS_CONV */
 	_mesh->copyFlux(FSR_OLD, PREVIOUS);
 	_mesh->copyFlux(FSR_OLD, PREVIOUS_CONV);
-	_mesh->copyDs(FORWARD, CURRENT);
-	_mesh->copyDs(FORWARD, PREVIOUS_CONV);
+	_mesh->copyCurrent(FSR_OLD, CURRENT);
+	_mesh->copyCurrent(FSR_OLD, PREVIOUS_CONV);
+	_mesh->copyCurrent(FSR_OLD, FORWARD);
 
 	/* copy fine mesh shape to FORWARD and PREVIOUS_CONV */
 	_geom_mesh->copyFlux(CURRENT, PREVIOUS);
@@ -226,6 +230,7 @@ void TransientSolver::solveOuterStep(){
 	    /* compute new shape function and check for outer loop convergence */
 	    k_eff = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);
 	    _mesh->copyFlux(FSR_OLD, CURRENT);
+	    _mesh->copyCurrent(FSR_OLD, FORWARD);	    
 
 	    /* compute the fine shape */
 	    _mesh->computeFineShape(_geom_mesh->getFluxes(FORWARD), _mesh->getFluxes(CURRENT));
@@ -233,6 +238,8 @@ void TransientSolver::solveOuterStep(){
 
 	    /* if ADIABATIC method, renormalize coarse mesh flux */
 	    if (_transient_method == ADIABATIC){
+	      vecScale(_mesh->getCurrents(FORWARD), _power_core.back() / computePower(), 
+		       _ng*_mesh->getNumCells()*4); 
 	      vecScale(_mesh->getFluxes(CURRENT), _power_core.back() / computePower(), 
 		       _ng*_mesh->getNumCells()); 
 	    }
@@ -253,8 +260,8 @@ void TransientSolver::solveOuterStep(){
 	/* copy converged field variables */
 	copyFieldVariables(CURRENT, PREVIOUS_CONV);
 	_mesh->copyFlux(CURRENT, PREVIOUS_CONV);
-	_mesh->copyDs(FORWARD, PREVIOUS_CONV);
 	_mesh->copyFrequency(CURRENT, PREVIOUS);
+	_mesh->copyCurrent(FORWARD, PREVIOUS_CONV);
 
 	/* set PREVIOUS_CONV time */
 	_ts->convergedMOCStep();
@@ -1045,9 +1052,9 @@ void TransientSolver::sync(materialState state){
 	
 	/* compute xs and interpolate diffusion correction factors */
 	_geom_mesh->interpolateFlux(_ts->getImprovedRatio());
+	_mesh->interpolateCurrent(_ts->getImprovedRatio());
 	_mesh->computeXS(_geom_mesh, CURRENT);
 	_mesh->computeDs(1.0, CURRENT);
-	_mesh->interpolateDs(_ts->getImprovedRatio());
     }
     else{
         #pragma omp parallel for
