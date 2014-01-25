@@ -1,3 +1,5 @@
+#!/usr/bin/env python2.7
+
 from distutils.core import setup
 from distutils.command.build_ext import build_ext
 from distutils.command.install import install
@@ -47,6 +49,9 @@ class custom_install(install):
         ('with-ccache', None, "Build with ccache for rapid recompilation"),
         ('with-papi', None, 'Build modules with PAPI instrumentation'),
         ('no-numpy', None, 'Build modules without NumPy C API'),
+
+        ('with-opencl', None, "Build openmoc.opencl module for GPU/CPU OpenCL Implementations"),
+        ('with-aocl', None, "Build openmoc.aocl module for Altera FPGAs"),
     ]
 
     # Include all of the default options provided by distutils for the 
@@ -56,7 +61,9 @@ class custom_install(install):
     # Set some compile options to be boolean switches
     boolean_options = ['with-sp',
                        'with-dp',
-                       'with_cuda',
+                       'with-cuda',
+                       'with-opencl',
+                       'with-aocl',
                        'with-gcc',
                        'with-icpc',
                        'with-bgxlc',
@@ -95,6 +102,8 @@ class custom_install(install):
         self.with_icpc = False
         self.with_bgxlc = False
         self.with_cuda = False
+        self.with_opencl = False
+        self.with_aocl = False
         self.with_sp = False
         self.with_dp = False
 
@@ -122,6 +131,9 @@ class custom_install(install):
         # Set the configuration options specified to be the default
         # unless the corresponding flag was invoked by the user
         config.with_cuda = self.with_cuda
+        config.with_opencl = self.with_opencl
+        config.with_aocl = self.with_aocl
+
         config.debug_mode = self.debug_mode
         config.with_ccache = self.with_ccache
         config.with_papi = self.with_papi
@@ -221,6 +233,7 @@ def customize_compiler(self):
     
     # Inform the compiler it can processes .cu CUDA source files
     self.src_extensions.append('.cu')
+    self.src_extensions.append('.cl')
 
     # Save reference to the default _compile method
     super_compile = self._compile
@@ -276,7 +289,6 @@ def customize_compiler(self):
             else:
                 self.set_executable('compiler_so', 'nvcc')
             postargs = config.compiler_flags['nvcc']
-
 
         # If we cannot determine how to compile this file, throw exception
         else:
@@ -367,10 +379,12 @@ def customize_linker(self):
             self.set_executable('linker_exe', 'bgxlc++_r')
 
         # If the filename for the extension contains cuda, use g++ to link
-        if 'cuda' in output_filename:
+        if    ('cuda' in output_filename) \
+           or ('opencl' in output_filename) \
+           or ('aocl' in output_filename):
             self.set_executable('linker_so', 'g++')
             self.set_executable('linker_exe', 'g++')
-        
+
         # Now call distutils-defined link method
         super_link(target_desc, objects,
                    output_filename, output_dir, libraries,
@@ -443,6 +457,36 @@ class custom_build_ext(build_ext):
             os.system('swig -python -c++ -keyword -DGCC -o ' + \
                       'openmoc/cuda/double/openmoc_cuda_double_wrap.cpp ' + \
                       'openmoc/cuda/double/openmoc_cuda_double.i')
+
+        if config.with_opencl:
+            os.system('swig -python -c++ -keyword -DGCC -o ' + \
+                      'openmoc/opencl/openmoc_opencl_wrap.cpp ' + \
+                      'openmoc/opencl/openmoc_opencl.i')
+
+        if config.with_opencl and 'single' in config.fp_precision:
+            os.system('swig -python -c++ -keyword -DGCC -o ' + \
+                      'openmoc/opencl/single/openmoc_opencl_single_wrap.cpp ' + \
+                      'openmoc/opencl/single/openmoc_opencl_single.i')
+
+        if config.with_opencl and 'double' in config.fp_precision:
+            os.system('swig -python -c++ -keyword -DGCC -o ' + \
+                      'openmoc/opencl/double/openmoc_opencl_double_wrap.cpp ' + \
+                      'openmoc/opencl/double/openmoc_opencl_double.i')
+
+        if config.with_aocl:
+            os.system('swig -python -c++ -keyword -DGCC -o ' + \
+                      'openmoc/aocl/openmoc_aocl_wrap.cpp ' + \
+                      'openmoc/aocl/openmoc_aocl.i')
+
+        if config.with_aocl and 'single' in config.fp_precision:
+            os.system('swig -python -c++ -keyword -DGCC -o ' + \
+                      'openmoc/aocl/single/openmoc_aocl_single_wrap.cpp ' + \
+                      'openmoc/aocl/single/openmoc_aocl_single.i')
+
+        if config.with_aocl and 'double' in config.fp_precision:
+            os.system('swig -python -c++ -keyword -DGCC -o ' + \
+                      'openmoc/aocl/double/openmoc_aocl_double_wrap.cpp ' + \
+                      'openmoc/aocl/double/openmoc_aocl_double.i')
 
         build_ext.build_extensions(self)
 

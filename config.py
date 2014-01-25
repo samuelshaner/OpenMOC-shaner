@@ -1,3 +1,5 @@
+#!/usr/bin/env python2.7
+
 import sys, copy
 from distutils.extension import Extension
 from distutils.util import get_platform
@@ -82,6 +84,8 @@ class configuration:
     # openmoc.cuda.double modules (depending on what precision levels 
     # are set for fp_precision)
     with_cuda = False
+    with_opencl = False
+    with_aocl = False
 
     # Compile with PAPI instrumentation
     with_papi = False
@@ -111,12 +115,13 @@ class configuration:
     # at compile time
     packages = ['openmoc', 'openmoc.intel', 'openmoc.gnu', 
                 'openmoc.bgq', 'openmoc.cuda', 'openmoc.intel.double', 
+                'openmoc.aocl', 'openmoc.opencl', 'openmoc.opencl.single',
+                'openmoc.opencl.double', 'openmoc.aocl.single',
+                'openmoc.aocl.double',
                 'openmoc.intel.single', 'openmoc.gnu.double', 
                 'openmoc.gnu.single', 'openmoc.bgq.single',
                 'openmoc.bgq.double', 'openmoc.cuda.double', 
                 'openmoc.cuda.single']
-
-
 
     ###########################################################################
     #                                 Source Code
@@ -189,6 +194,18 @@ class configuration:
                        'src/dev/gpu/clone.cu',
                        'src/dev/gpu/GPUSolver.cu']
 
+    sources['opencl'] = ['openmoc/opencl/openmoc_opencl_wrap.cpp',
+                         'src/dev/cl/framework/CLInstance.cpp',
+                         'src/dev/cl/framework/CLError.cpp',
+                         'src/dev/cl/framework/CLPerf.cpp',
+                         'src/dev/cl/CLQuery.cpp',
+                         'src/dev/cl/CLSolver.cpp']
+
+    sources['aocl'] = ['openmoc/opencl/openmoc_aocl_wrap.cpp',
+                         'src/dev/cl/CLQuery.cpp',
+                         'src/dev/cl/CLSolver.cpp']
+
+
 
     ###########################################################################
     #                                Compiler Flags
@@ -208,7 +225,8 @@ class configuration:
                                '-gencode=arch=compute_20,code=sm_20',
                                '-gencode=arch=compute_30,code=sm_30']
 
-
+    compiler_flags['opencl'] = copy.deepcopy(compiler_flags['gcc'])
+    compiler_flags['aocl'] = copy.deepcopy(compiler_flags['gcc'])
 
     ###########################################################################
     #                                 Linker Flags
@@ -232,7 +250,8 @@ class configuration:
                              '-Wl,-soname,' + get_openmoc_object_name()]
     linker_flags['nvcc'] = ['-shared', get_openmoc()]
 
-
+    linker_flags['opencl'] = copy.deepcopy(linker_flags['gcc'])
+    linker_flags['aocl'] = copy.deepcopy(linker_flags['gcc'])
 
     ###########################################################################
     #                               Shared Libraries
@@ -247,6 +266,8 @@ class configuration:
     shared_libraries['nvcc'] = ['cudart']
     shared_libraries['bgxlc'] = ['stdc++', 'pthread', 'm', 'xlsmp', 'rt']
 
+    shared_libraries['opencl'] = ['stdc++', 'gomp', 'dl','pthread', 'm', 'OpenCL']
+    shared_libraries['aocl'] = ['stdc++', 'gomp', 'dl','pthread', 'm', 'OpenCL']
 
     ###########################################################################
     #                              Library Directories
@@ -265,6 +286,8 @@ class configuration:
     library_directories['bgxlc'] = []
     library_directories['nvcc'] = ['/usr/local/cuda/lib64']
 
+    library_directories['opencl'] = copy.deepcopy(library_directories['gcc'])
+    library_directories['aocl'] = copy.deepcopy(library_directories['gcc'])
 
 
     ###########################################################################
@@ -284,6 +307,11 @@ class configuration:
     include_directories['bgxlc'] = ['/usr/lib64/python2.6/site-packages/numpy/core/include']
     include_directories['nvcc'] = ['/usr/local/cuda/include']
 
+    include_directories['opencl'] = copy.deepcopy(include_directories['gcc'])
+    include_directories['aocl'] = copy.deepcopy(include_directories['gcc'])
+
+    include_directories['opencl'].append("src/ext/compute/include");
+    include_directories['aocl'].append("src/ext/compute/include");
 
     ###########################################################################
     #                                 SWIG Flags
@@ -291,7 +319,6 @@ class configuration:
 
     # A list of the flags for SWIG
     swig_flags = ['-c++', '-keyword']
-
 
     ###########################################################################
     #                                  Macros
@@ -355,7 +382,9 @@ class configuration:
                                 ('DOUBLE', None),
                                 ('CUDA', None),
                                 ('CCACHE_CC', 'nvcc')]
-    
+
+    macros['opencl'] = copy.deepcopy(macros['gcc'])
+    macros['aocl'] = copy.deepcopy(macros['gcc'])
 
 
     def setup_extension_modules(self):
@@ -418,9 +447,28 @@ class configuration:
                           swig_opts = self.swig_flags  + ['-DNVCC'],
                           export_symbols = ['init_openmoc']))
         
-            # REmove the main SWIG configuration file for builds of other 
+            # Remove the main SWIG configuration file for builds of other 
             # extensions (ie, openmoc.cuda.single, openmoc.cuda.double)
             self.sources['nvcc'].remove('openmoc/cuda/openmoc_cuda_wrap.cpp')
+
+        # The openmoc.opencl extension if requested by the user
+        if self.with_opencl:
+            
+            self.extensions.append(
+                Extension(name = '_openmoc_opencl', 
+                          sources = copy.deepcopy(self.sources['opencl']),
+                          library_dirs = self.library_directories['opencl'], 
+                          libraries = self.shared_libraries['opencl'],
+                          extra_link_args = self.linker_flags['opencl'], 
+                          include_dirs = self.include_directories['opencl'],
+                          define_macros = self.macros['opencl'][self.fp],
+                          swig_opts = self.swig_flags,
+                          package_data = dict([('clkernels', ['src/dev/cl/CLKernels.cl'])]),
+                          export_symbols = ['init_openmoc']))
+       
+            # Remove the main SWIG configuration file for builds of other 
+            # extensions (ie, openmoc.opencl.single, openmoc.opencl.double)
+            self.sources['opencl'].remove('openmoc/opencl/openmoc_opencl_wrap.cpp')
             
         # Loop over the compilers and floating point precision levels to create
         # extension modules for each (ie, openmoc.intel.double, 
@@ -459,7 +507,21 @@ class configuration:
                     swig_wrap_file = 'openmoc/bgq/' + fp
                     swig_wrap_file += '/openmoc_bgq_' + fp + '_wrap.cpp'
                     self.sources['bgxlc'].append(swig_wrap_file)
-                    
+
+                # For openmoc.opencl.* modules
+                elif cc == 'opencl':
+                    ext_name = '_openmoc_opencl_' + fp
+                    swig_wrap_file = 'openmoc/opencl/' + fp
+                    swig_wrap_file += '/openmoc_opencl_' + fp + '_wrap.cpp'
+                    self.sources['opencl'].append(swig_wrap_file)
+
+                # For openmoc.aocl.* modules
+                elif cc == 'aocl':
+                    ext_name = '_openmoc_aocl_' + fp
+                    swig_wrap_file = 'openmoc/aocl/' + fp
+                    swig_wrap_file += '/openmoc_aocl_' + fp + '_wrap.cpp'
+                    self.sources['aocl'].append(swig_wrap_file)
+    
                 # If an unsupported compiler, throw error
                 else:
                     raise NameError('Compiler ' + str(cc) + ' is not supported')
