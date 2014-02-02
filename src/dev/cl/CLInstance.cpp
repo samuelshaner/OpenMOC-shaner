@@ -8,6 +8,9 @@ CLKernel::CLKernel(CLInstance inst, comp::program _program, std::string name) {
     kernel = program.create_kernel(name.c_str());
 }
 
+CLKernel::~CLKernel() {
+}
+
 void
 CLKernel::setKernelArgs(int count, ...) {
 	va_list arglist;
@@ -39,46 +42,22 @@ CLArgument::CLArgument(size_t _argSize, void* _arg) {
 	arg = _arg;
 }
 
-CLArgument::~CLArgument() {}
-
-CLMemory::CLMemory(CLInstance inst, size_t size) {
-	parent = inst;
-    buf = comp::buffer(
-            inst.ctx,
-            size,
-            comp::memory_object::read_write,
-            0);
+CLArgument::CLArgument(cl_int num) {
+    cl_int* nstor = (cl_int*)malloc(sizeof(cl_int));
+    *nstor = num;
+    CLArgument(sizeof(cl_int), nstor);
 }
 
-CLArgument *
-CLMemory::getAsArg() {
-    cl_mem* clMemStor = (cl_mem*)malloc(sizeof(cl_mem));
-    *clMemStor = buf.get();
-    return new CLArgument(sizeof(cl_mem),clMemStor);
+CLArgument::~CLArgument() {
+    free(arg);
 }
 
-cl_int
-CLMemory::read(
-		cl_uint hostBufSize,
-        void * hostBuf) {
-
-    cl_int res = parent.queue.enqueue_read_buffer(
-            buf,
-            hostBufSize,
-            hostBuf);
-    parent.wait();
-    return res;
+CLA* narg(cl_int num) {
+    return new CLA(num);
 }
 
-cl_int
-CLMemory::write(
-        cl_uint hostBufSize,
-		void * hostBuf) {
-
-    return parent.queue.enqueue_write_buffer(
-            buf,
-            hostBufSize,
-            hostBuf);
+CLA* barg(size_t size, void* buf) {
+    return new CLA(size, buf);
 }
 
 CLWorkDimensions::CLWorkDimensions(
@@ -119,15 +98,17 @@ CLWorkDimensions::CLWorkDimensions(
     localDims = (size_t*)localWork;
 }
 
-CLInstance::CLInstance() {
-	platforms = comp::system::platforms();
-	devices = comp::system::devices();
-	currentDevice = comp::system::default_device();
-	ctx = comp::system::default_context();
-	queue = comp::command_queue(
-		ctx, currentDevice,
-		comp::command_queue::enable_profiling);
-}
+CLInstance::CLInstance() :
+	ctx(comp::system::default_context()),
+	queue(comp::command_queue(
+		ctx, comp::system::default_device(),
+		comp::command_queue::enable_profiling)),
+    platforms(comp::system::platforms()),
+    devices(comp::system::devices()),
+    currentDevice(comp::system::default_device())
+{}
+
+CLInstance::~CLInstance() { }
 
 void
 CLInstance::setCurrentDevice(int deviceIndex) {
