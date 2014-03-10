@@ -17,7 +17,7 @@ relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
 
-log.setLogLevel('INFO')
+log.setLogLevel('NORMAL')
 
 log.py_printf('TITLE', 'Simulating the OECD\'s C5G7 Benchmark Problem...')
 
@@ -340,7 +340,7 @@ geometry.initializeFlatSourceRegions()
 log.py_printf('NORMAL', 'Creating cmfd module...')
 
 cmfd = Cmfd(geometry)
-cmfd.setOmega(1.0)
+cmfd.setOmega(1.5)
 
 ###############################################################################
 ########################   Creating the TrackGenerator   ######################
@@ -360,6 +360,7 @@ solver = ThreadPrivateSolver(geometry, track_generator, cmfd)
 solver.setSourceConvergenceThreshold(tolerance)
 solver.setNumThreads(num_threads)
 solver.convergeSource(max_iters)
+process.computeFSRPinPowers(solver, True)
 solver.printTimerReport()
 
 
@@ -370,10 +371,10 @@ solver.printTimerReport()
 log.py_printf('NORMAL', 'Plotting data...')
 
 #plotter.plotTracks(track_generator)
-#plotter.plotMaterials(geometry, gridsize=500)
+#plotter.plotMaterials(geometry, gridsize=1000)
 #plotter.plotCells(geometry, gridsize=500)
 #plotter.plotFlatSourceRegions(geometry, gridsize=500)
-plotter.plotFluxes(geometry, solver, energy_groups=[1,2,3,4,5,6,7])
+#plotter.plotFluxes(geometry, solver, energy_groups=[1,2,3,4,5,6,7])
 #plotter.plotMeshFluxes(mesh, energy_groups=[1,2,3,4,5,6,7])
 
 log.py_printf('TITLE', 'Finished')

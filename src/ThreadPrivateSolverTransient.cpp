@@ -145,7 +145,7 @@ FP_PRECISION ThreadPrivateSolverTransient::convergeSource(int max_iterations) {
     for (int i=0; i < max_iterations; i++) {
 
 	/* normalize the fluxes */
-        if (_geometry->getMesh()->getInitialState()){
+        if (_geometry->getMesh()->getInitialState() || _geometry->getMesh()->getTransientType() == ADIABATIC){
 	    _timer->startTimer();
 	    normalizeFluxes();
 	    _timer->stopTimer();
@@ -291,7 +291,7 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 							    _num_groups);
 	
 		/* delayed neutron precursor source */
-		if (mesh->getInitialState() == false){
+		if (mesh->getInitialState() == false && mesh->getTransientType() != ADIABATIC){
 		    delayed_source = 0.0;
 		    if (material->isFissionable()){
 			for (int dg=0; dg < mesh->getNumDelayGroups(); dg++)

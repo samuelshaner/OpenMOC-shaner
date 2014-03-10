@@ -40,7 +40,6 @@ Cmfd::Cmfd(Geometry* geometry, double criteria) {
     _phi_new  = NULL;  
     _b        = new double[_nc];
     _b_prime  = new double[_nc];  
-
     _AM       = new double[_nc*(4+_ng)];
     _y        = new double[_nc];
     
@@ -109,7 +108,7 @@ double Cmfd::computeKeff(){
     _timer->stopTimer();
     _timer->recordSplit("CMFD construct matrices");
 
-    if (_mesh->getInitialState() == false){
+    if (_mesh->getInitialState() == false && _mesh->getTransientType() != ADIABATIC){
 
       matSubtract(_AM, _A, 1.0, _M, _cx, _cy, _ng);
 
@@ -287,7 +286,7 @@ double Cmfd::computeKeff(){
 	
     
     /* rescale the old and new flux */
-    if (_mesh->getInitialState() == true && _solve_method == MOC)
+    if ((_mesh->getInitialState() == true || _mesh->getTransientType() == ADIABATIC) && _solve_method == MOC)
 	rescaleFlux();
     
     /* update the MOC flux */
@@ -382,7 +381,7 @@ void Cmfd::constructMatrices(){
 		
 		row = cell*_ng + e;
 
-		if (_mesh->getInitialState() == false){
+		if (_mesh->getInitialState() == false && _mesh->getTransientType() != ADIABATIC){
 		    
 		    /* method source */
 		    if (_mesh->getTransientType() == THETA){
@@ -394,7 +393,7 @@ void Cmfd::constructMatrices(){
 		    }
 		    else if (_mesh->getTransientType() == MAF){
 
-		        _b[row] = _mesh->getFluxes(PREVIOUS_CONV)[row] 
+		        _b[row] = _mesh->getFluxes(PREVIOUS)[row] 
 			  / (velocity[e] * dt) * volumes[cell]; 
 
 			value = volumes[cell] / velocity[e] * (1.0 / dt + frequency_new[row]); 

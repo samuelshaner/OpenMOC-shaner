@@ -27,15 +27,16 @@ import os
 from openmoc import *
 from log import *
 
-
 ## A static variable for the output directory in which to save plots
 subdirectory = "/plots/"
 
 ## The number of colors to use when creating a random color map for plots
-num_colors = 50
+#num_colors = 50
+num_colors = 9
 
 ## An array of random floats that represents a random color map for plots
-color_map = np.random.random_sample((num_colors,))
+#color_map = np.random.random_sample((num_colors,))
+color_map = np.array([0.1, 0.2, 0.3, 0.4, 0.0, 0.6, 0.7, 0.8, 0.9])
 
 
 ##
@@ -82,9 +83,9 @@ def plotTracks(track_generator):
     y = coords[1::2]
 
     # Make figure of line segments for each track
-    fig = plt.figure()
+    fig = plt.figure(figsize=(10,10))
     for i in range(num_tracks):
-        plt.plot([x[i*2], x[i*2+1]], [y[i*2], y[i*2+1]], 'b-')
+        plt.plot([x[i*2], x[i*2+1]], [y[i*2], y[i*2+1]], 'k-')
 
     plt.xlim([x.min(), x.max()])
     plt.ylim([y.min(), y.max()])
@@ -152,7 +153,7 @@ def plotSegments(track_generator):
 
 
     # Make figure of line segments for each track
-    fig = plt.figure()
+    fig = plt.figure(figsize=(5,5))
     for i in range(num_segments):
         # Create a color map corresponding to FSR IDs
         jet = cm = plt.get_cmap('jet') 
@@ -243,7 +244,7 @@ def plotMaterials(geometry, gridsize=250):
 
     # Plot a 2D color map of the materials
     fig = plt.figure()
-    plt.imshow(surface, extent=[xmin, xmax, ymin, ymax])
+    plt.imshow(surface, extent=[xmin, xmax, ymin, ymax], vmin=0.0, vmax=1.0)
     plt.title('Materials')
     filename = directory + 'materials.png'
     fig.savefig(filename, bbox_inches='tight')
@@ -386,7 +387,7 @@ def plotFlatSourceRegions(geometry, gridsize=250):
             geometry.findCellContainingCoords(point)
             fsr_id = geometry.findFSRId(point)
             surface[j][i] = color_map[fsr_id % num_colors]
-            surface[j][i] = fsr_id
+            #surface[j][i] = fsr_id
 
     # Flip the surface vertically to align NumPy row/column indices with the
     # orientation expected by the user
@@ -877,3 +878,76 @@ def plotTemperature(geometry, gridsize=250):
     plt.title('Temperature')
     filename = directory + 'temperature.png'
     fig.savefig(filename, bbox_inches='tight')
+
+
+##
+# @brief This method takes in a geometry object and plots a color-coded 2D surface #        plot representing the flat source regions in the geometry.
+# @details The geometry object must be initialized with materials, cells, 
+#          universes and lattices before being passed into this method. A user
+#          may invoke this function from an OpenMOC Python file as follows:
+#
+# @code
+#         openmoc.plotter.plotFlatSourceRegions(my_geometry)
+# @endcode
+#
+# @param geometry a geometry object which has been initialized with materials,
+#        cells, universes and lattices
+# @param gridsize an optional number of grid cells for the plot
+def plotMeshRegions(geometry, mesh, gridsize=250):
+
+    global subdirectory
+
+    directory = getOutputDirectory() + subdirectory
+
+    # Make directory if it does not exist
+    if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    # Error checking
+    if not 'Mesh' in str(type(mesh)):
+        py_printf('ERROR', 'Unable to plot the mesh regions since ' + \
+                    'input was not a mesh class object')
+    if not isinstance(gridsize, int):
+        py_printf('ERROR', 'Unable to plot the mesh regions since ' + \
+                    'since the gridsize %s is not an integer', str(gridsize))
+    if gridsize <= 0:
+        py_printf('Error', 'Unable to plot the mesh regions ' + \
+                    'with a negative gridsize (%d)', gridsize)
+
+    py_printf('NORMAL', 'Plotting the mesh regions...')
+
+    # Initialize a numpy array for the surface colors
+    surface = numpy.zeros((gridsize, gridsize))
+
+    # Retrieve the bounding box for the geometry
+    xmin = geometry.getXMin()
+    xmax = geometry.getXMax()
+    ymin = geometry.getYMin()
+    ymax = geometry.getYMax()
+
+    # Initialize numpy arrays for the grid points
+    xcoords = np.linspace(xmin, xmax, gridsize)
+    ycoords = np.linspace(ymin, ymax, gridsize)
+
+    # Find the flat source region IDs for each grid point
+    for i in range(gridsize):
+        for j in range(gridsize):
+
+            x = xcoords[i]
+            y = ycoords[j]
+
+            point = LocalCoords(x, y)
+            cell_id = mesh.findCellId(point)
+            surface[j][i] = color_map[cell_id % num_colors]
+            #surface[j][i] = fsr_id
+
+    # Flip the surface vertically to align NumPy row/column indices with the
+    # orientation expected by the user
+    surface = np.flipud(surface)
+
+    # Plot a 2D color map of the flat source regions
+    fig = plt.figure()
+    plt.imshow(surface, extent=[xmin, xmax, ymin, ymax])
+    plt.title('Mesh Regions')
+    filename = directory + 'mesh-regions.png'
+    fig.savefig(filename)

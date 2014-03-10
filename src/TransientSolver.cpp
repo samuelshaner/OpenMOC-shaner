@@ -72,6 +72,7 @@ void TransientSolver::solveInitialState(){
 	_cmfd->checkNeutronBalance();
     }
     else{
+
 	/* MOC solve */
         static_cast<ThreadPrivateSolverTransient*>(_solver)->resetSegmentMaterials();        
 	_k_eff_0 = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);    
@@ -135,7 +136,7 @@ void TransientSolver::solveInitialState(){
 void TransientSolver::solveOuterStep(){
   
     /* set time integration parameters */
-    double tolerance_in = 1.e-7;
+    double tolerance_in = 1.e-8;
     double tolerance_out = 1.e-6;
     double residual_out = 1.0;
     double residual_in = 1.0;
@@ -216,12 +217,10 @@ void TransientSolver::solveOuterStep(){
 	    /* compute frequencies */
 	    _tcmfd->computeFrequency();
 
-	    /* if residual == 1.0, prolongate xs */
-	    if (residual_out == 1.0){
-	        log_printf(NORMAL, "Prolongating MOC flux");
-	    	_mesh->updateMOCFlux();
-		static_cast<ThreadPrivateSolverTransient*>(_solver)->scaleTrackFlux(_power_core.back() / old_power);
-	    }
+	    /* prolongate fine mesh flux */
+	    log_printf(NORMAL, "Prolongating MOC flux");
+	    _mesh->updateMOCFlux();
+	    static_cast<ThreadPrivateSolverTransient*>(_solver)->scaleTrackFlux(_power_core.back() / old_power);
 
 	    /* compute new shape function and check for outer loop convergence */
 	    k_eff = static_cast<ThreadPrivateSolverTransient*>(_solver)->convergeSource(1000);
@@ -229,12 +228,12 @@ void TransientSolver::solveOuterStep(){
 
 	    /* compute the fine shape */
 	    _mesh->computeFineShape(_geom_mesh->getFluxes(FORWARD), _mesh->getFluxes(CURRENT));
-	    //sync(CURRENT);
+	    sync(CURRENT);
 
 	    /* if ADIABATIC method, renormalize coarse mesh flux */
 	    if (_transient_method == ADIABATIC){
-	      vecScale(_mesh->getFluxes(CURRENT), _power_core.back() / computePower(), 
-		       _ng*_mesh->getNumCells()); 
+	        vecScale(_mesh->getFluxes(CURRENT), _power_core.back() / computePower(), 
+			 _ng*_mesh->getNumCells()); 
 	    }
 
 	    /* compute and print residual */
@@ -945,12 +944,20 @@ void TransientSolver::setDtMOC(double dt){
     _dt_moc = dt;
     _mesh->setDtMOC(dt);
     _geom_mesh->setDtMOC(dt);
+
+    if (_ts != NULL)
+      _ts->setDtMOC(dt);
+
 }
 
 
 void TransientSolver::setDtCMFD(double dt){
     _dt_cmfd = dt;
     _tcmfd->setDtCMFD(dt);
+
+    if (_ts != NULL)
+      _ts->setDtCMFD(dt);
+
 }
 
 

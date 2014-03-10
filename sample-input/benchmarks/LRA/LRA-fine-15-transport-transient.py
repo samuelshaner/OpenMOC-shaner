@@ -15,8 +15,8 @@ max_iters = options.max_iters
 relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
-dt_cmfd = 1e-3
-dt_moc = 1e-2
+dt_cmfd = 1e-4
+dt_moc = 5e-3
 log.setLogLevel('NORMAL')
 
 ###############################################################################
@@ -58,12 +58,12 @@ planes[3].setBoundaryType(VACUUM)
 log.py_printf('NORMAL', 'Creating cells...')
 
 cells = []
-cells.append(CellBasic(universe=1, material=region1))
-cells.append(CellBasic(universe=2, material=region2))
-cells.append(CellBasic(universe=3, material=region3))
-cells.append(CellBasic(universe=4, material=region4))
-cells.append(CellBasic(universe=5, material=region5))
-cells.append(CellBasic(universe=6, material=region6))
+cells.append(CellBasic(universe=1, material=region1, sectors=8))
+cells.append(CellBasic(universe=2, material=region2, sectors=8))
+cells.append(CellBasic(universe=3, material=region3, sectors=8))
+cells.append(CellBasic(universe=4, material=region4, sectors=8))
+cells.append(CellBasic(universe=5, material=region5, sectors=8))
+cells.append(CellBasic(universe=6, material=region6, sectors=8))
 cells.append(CellFill(universe=21, universe_fill=31))
 cells.append(CellFill(universe=22, universe_fill=32))
 cells.append(CellFill(universe=23, universe_fill=33))
@@ -272,7 +272,7 @@ transientSolver.setDtCMFD(dt_cmfd)
 transientSolver.setStartTime(0.0)
 transientSolver.setEndTime(3.0)
 transientSolver.setNumDelayGroups(2)
-transientSolver.setTransientMethod('MAF')
+transientSolver.setTransientMethod('ADIABATIC')
 transientSolver.setPowerInit(1.e-6)
 
 transientSolver.solveInitialState()

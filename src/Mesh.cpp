@@ -405,7 +405,7 @@ void Mesh::computeDs(double relax_factor, materialState state){
 			/* if the magnitude of d_tilde is greater than the magnitude of d_hat,
 			 * select new values d_tilde and d_hat to ensure the course mesh equations
 			 * are guaranteed to be diagonally dominant */
-			if (fabs(d_tilde) > fabs(d_hat)){
+			if (fabs(d_tilde) > fabs(d_hat) && _initial_state == true){
 			    
 			    if (sense == -1){
 				/* d_tilde is positive */
@@ -593,7 +593,7 @@ void Mesh::computeFineShape(double* geom_shape, double* mesh_flux){
 }
 
 
-void Mesh::reconstructFineFlux(double* geom_shape, double* geom_flux, double* mesh_flux){
+void Mesh::reconstructFineFlux(double* geom_shape, double* mesh_flux){
 
     std::vector<int>::iterator iter;
     int cell;
@@ -606,7 +606,7 @@ void Mesh::reconstructFineFlux(double* geom_shape, double* geom_flux, double* me
     for (int i = 0; i < _cells_y*_cells_x; i++){
 	for (iter = _cell_fsrs.at(i).begin(); iter != _cell_fsrs.at(i).end(); ++iter){
 	    for (int g = 0; g < ng; g++){
-		geom_flux[*iter*ng+g] = geom_shape[*iter*ng+g] / _velocity[g] *
+		_FSR_fluxes[*iter*ng+g] = geom_shape[*iter*ng+g] / _velocity[g] *
 		    _volumes[i] * mesh_flux[i*ng+g];
 	    }
 	}
@@ -948,7 +948,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on left geometry edge
 	     * give to bottom surface and left surfaces */
-	    else if (x == 0){
+	    else if (x == 0 && y != _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
 		    _currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
@@ -958,7 +958,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on bottom geometry edge
 	     * give to bottom surface and left surfaces */
-	    else{
+	    else if (x != 0 && y == _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
 		    _currents[(y*_cells_x+x)  *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
@@ -982,7 +982,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on right geometry edge
 	     * give to bottom surface and right surface */
-	    else if (x == _cells_x - 1){
+	    else if (x == _cells_x - 1 && y != _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
 		    _currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
@@ -992,7 +992,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on bottom geometry edge
 	     * give to bottom surface and right surface */
-	    else{
+	    else if (x != _cells_x - 1 && y == _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
 		    _currents[(y*_cells_x+x)  *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
@@ -1002,7 +1002,7 @@ void Mesh::splitCorners(){
 	    }
 	    
 	    /* split the RIGHT TOP CORNER */
-	    
+
 	    /* if cell is not on right or top geometry edge
 	     * give to right surface and top surface of mesh cell to the right */
 	    if (x < _cells_x - 1 && y > 0){
@@ -1016,7 +1016,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on right geometry edge
 	     * give to right surface and top surface */
-	    else if (x == _cells_x - 1){
+	    else if (x == _cells_x - 1 && y != 0){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
 		    _currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
@@ -1026,7 +1026,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on top geometry edge
 	     * give to right surface and top surface */
-	    else{
+	    else if (x != _cells_x - 1 && y == 0){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
 		    _currents[(y*_cells_x+x)  *_num_groups*8 + 2*_num_groups + e] += _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
@@ -1036,7 +1036,7 @@ void Mesh::splitCorners(){
 	    }
 	    
 	    /* split the LEFT TOP CORNER */
-	    
+
 	    /* if cell is not on left or top geometry edge
 	     * give to left surface and top surface of mesh cell to the left */
 	    if (x > 0 && y > 0){
@@ -1050,7 +1050,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on left geometry edge
 	     * give to top surface and left surface */
-	    else if (x == 0){
+	    else if (x == 0 && y != 0){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
 		    _currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
@@ -1060,7 +1060,7 @@ void Mesh::splitCorners(){
 	    }
 	    /* if cell is on top geometry edge
 	     * give to top surface and left surface */
-	    else{
+	    else if (x != 0 && y == 0){
 		for (int e = 0; e < _num_groups; e++){
 		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
 		    _currents[(y*_cells_x+x)  *_num_groups*8 +                 e] += _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
@@ -1068,7 +1068,7 @@ void Mesh::splitCorners(){
 		    _currents[(y*_cells_x+x-1)*_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
 		}
 	    }
-	    
+
 	    for (int e = 0; e < _num_groups; e++){
 		_currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e] = 0.0;
 		_currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e] = 0.0;

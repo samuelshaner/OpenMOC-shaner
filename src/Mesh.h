@@ -239,7 +239,7 @@ public:
   void setFSRToCell(int fsr_id, int cell_id);
   int* getFSRsToCells();
 
-  void reconstructFineFlux(double* geom_shape, double* geom_flux, double* mesh_flux);
+  void reconstructFineFlux(double* geom_shape, double* mesh_flux);
   void computeFineShape(double* geom_shape, double* mesh_flux);
   void interpolateDs(double ratio);
   void interpolateFlux(double ratio);

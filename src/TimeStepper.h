@@ -44,6 +44,8 @@ public:
     void convergedMOCStep();
     void printTimes();
     void incrementTime(materialState state, double dt);
+    void setDtMOC(double dt);
+    void setDtCMFD(double dt);
         
     /* getters */
     double getStartTime();

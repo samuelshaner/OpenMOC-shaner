@@ -58,8 +58,18 @@ double TimeStepper::getDtMOC(){
 }
 
 
+void TimeStepper::setDtMOC(double dt){
+    _dt_moc = dt;
+}
+
+
 double TimeStepper::getDtCMFD(){
     return _dt_cmfd;
+}
+
+
+void TimeStepper::setDtCMFD(double dt){
+    _dt_cmfd = dt;
 }
 
 
