@@ -63,9 +63,6 @@ private:
   int _num_groups;
   int _num_delay_groups;
 
-  /* number of surface current values */
-  int _num_currents;
-
   /* number of fsrs */
   int _num_fsrs;
 
@@ -77,9 +74,6 @@ private:
 
   /* array of mesh cell volumes */
   double* _volumes;
-
-  /* array of mesh surface currents */
-  double* _currents;
 
   /* vector of vectors of fsrs in each mesh cell */
   std::vector< std::vector<int> > _cell_fsrs;
@@ -93,6 +87,7 @@ private:
 
   /* map of fluxes mapped onto mesh */
   std::map<materialState, double*> _fluxes;
+  std::map<materialState, double*> _currents;
   std::map<materialState, double*> _frequency;
 
   /* map of fsrs to cells */
@@ -151,7 +146,6 @@ public:
   int getCellsY();
   int getNumCells();
   boundaryType getBoundary(int side);
-  int getNumCurrents();
   double getFlux(int cell_id, int group, materialState state=CURRENT);
   std::vector<std::vector<int> >* getCellFSRs();
   Material** getMaterials();
@@ -160,7 +154,7 @@ public:
   double* getFrequencies(materialState state);
   double* getLengthsX();
   double* getLengthsY();
-  double* getCurrents();
+  double* getCurrents(materialState state);
   int getMeshLevel();
   
   /* set mesh parameters */
@@ -203,9 +197,10 @@ public:
   void initializeSurfaceCurrents();
   void createNewFlux(materialState state);
   void createNewFrequency(materialState state);
+  void createNewCurrent(materialState state);
   void copyFlux(materialState from_state, materialState to_state);
   void copyFrequency(materialState from_state, materialState to_state);
-  void copyDs(materialState from_state, materialState to_state);
+  void copyCurrent(materialState from_state, materialState to_state);
   void dumpFlux(materialState state);
   void dumpXS();
 
@@ -241,7 +236,7 @@ public:
 
   void reconstructFineFlux(double* geom_shape, double* mesh_flux);
   void computeFineShape(double* geom_shape, double* mesh_flux);
-  void interpolateDs(double ratio);
+  void interpolateCurrent(double ratio);
   void interpolateFlux(double ratio);
   void normalizeFlux(double scale_val);
   void normalizeDs(double scale_val);

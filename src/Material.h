@@ -153,7 +153,7 @@ public:
     void setBucklingByGroup(double xs, int group);
     void setDifCoefByGroup(double xs, int group);
     void setDifHatByGroup(double xs, int group, int surface);
-    void setDifTildeByGroup(double xs, int group, int surface, materialState state=FORWARD);
+    void setDifTildeByGroup(double xs, int group, int surface);
 
     void checkSigmaT();
     std::string toString();

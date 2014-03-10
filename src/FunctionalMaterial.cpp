@@ -244,8 +244,8 @@ double FunctionalMaterial::interpolateXS(double* xs_ref, materialState state, in
 void FunctionalMaterial::initializeTransientProps(double num_delay_groups, bool cmfd_mesh){
 
   _num_delay_groups = num_delay_groups;
-  _prec_conc = new double[_num_delay_groups*6];
-  _prec_freq = new double[_num_delay_groups*6];
+  _prec_conc = new double[_num_delay_groups*7];
+  _prec_freq = new double[_num_delay_groups*7];
 
 }
 

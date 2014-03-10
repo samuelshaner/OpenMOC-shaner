@@ -279,8 +279,8 @@ double* Material::getDifHat() {
 double* Material::getDifTilde() {
 
   if (_dif_tilde == NULL){
-    _dif_tilde = new double[6*4*_num_groups];
-    for (int e = 0; e < 6*4*_num_groups; e++)
+    _dif_tilde = new double[4*_num_groups];
+    for (int e = 0; e < 4*_num_groups; e++)
       _dif_tilde[e] = 0.0;
   }
 
@@ -766,7 +766,7 @@ void Material::setDifHatByGroup(double xs, int group, int surface) {
  * @param xs the diffusion coefficient
  * @param group the energy group
  */
-void Material::setDifTildeByGroup(double xs, int group, int surface, materialState state) {
+void Material::setDifTildeByGroup(double xs, int group, int surface) {
 
     if (group < 0 || group >= _num_groups)
         log_printf(ERROR, "Unable to set diffusion coefficient correction for group %d"
@@ -776,12 +776,12 @@ void Material::setDifTildeByGroup(double xs, int group, int surface, materialSta
     int ngs = 4*_num_groups;
 
     if (_dif_tilde == NULL){
-      _dif_tilde = new double[6*ngs];
-      for (int i=0; i < 6*ngs; i++)
+      _dif_tilde = new double[ngs];
+      for (int i=0; i < ngs; i++)
 	  _dif_tilde[i] = 0.0;
     }
 
-    _dif_tilde[int(state)*ngs + surface*_num_groups + group] = xs;
+    _dif_tilde[surface*_num_groups + group] = xs;
 }
 
 
@@ -1026,12 +1026,7 @@ Material* Material::clone(){
   if (_dif_tilde != NULL){
       for (int i = 0; i < _num_groups; i++){
 	  for (int s = 0; s < 4; s++){
-	      material_clone->setDifTildeByGroup(_dif_tilde[0*ngs + s*_num_groups+i], i, s, PREVIOUS_CONV);  
-	      material_clone->setDifTildeByGroup(_dif_tilde[1*ngs + s*_num_groups+i], i, s, PREVIOUS);  
-	      material_clone->setDifTildeByGroup(_dif_tilde[2*ngs + s*_num_groups+i], i, s, CURRENT);  
-	      material_clone->setDifTildeByGroup(_dif_tilde[3*ngs + s*_num_groups+i], i, s, FORWARD);  
-	      material_clone->setDifTildeByGroup(_dif_tilde[4*ngs + s*_num_groups+i], i, s, FSR);  
-	      material_clone->setDifTildeByGroup(_dif_tilde[5*ngs + s*_num_groups+i], i, s, FSR_OLD);  
+	      material_clone->setDifTildeByGroup(_dif_tilde[s*_num_groups+i], i, s);  
 	  }
       }
   }

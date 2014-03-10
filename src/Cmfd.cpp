@@ -340,7 +340,6 @@ void Cmfd::constructMatrices(){
     double value;
     int cell;
     int row;
-    int offset = int(FORWARD)*4*_ng;
     int e, g, dg;
     
     /* get arrays */
@@ -428,7 +427,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on diagonal */
 		
 		value = (material->getDifHat()[2*_ng + e] 
-			 - material->getDifTilde()[offset + 2*_ng + e]) 
+			 - material->getDifTilde()[2*_ng + e]) 
 		  * heights[cell / _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
@@ -437,7 +436,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on off diagonal */
 		if (x != _cx - 1){
 		    value = - (material->getDifHat()[2*_ng + e] 
-			       + material->getDifTilde()[offset + 2*_ng + e]) 
+			       + material->getDifTilde()[2*_ng + e]) 
 		      * heights[cell / _cx];
 		    
 		    _A[row*(_ng+4)+_ng+2] += value; 
@@ -447,7 +446,7 @@ void Cmfd::constructMatrices(){
 		
 		/* set transport term on diagonal */
 		value = (material->getDifHat()[0*_ng + e] 
-			 + material->getDifTilde()[offset + 0*_ng + e]) 
+			 + material->getDifTilde()[0*_ng + e]) 
 		    * heights[cell / _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
@@ -455,7 +454,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on off diagonal */
 		if (x != 0){
 		    value = - (material->getDifHat()[0*_ng + e] 
-			       - material->getDifTilde()[offset + 0*_ng + e]) 
+			       - material->getDifTilde()[0*_ng + e]) 
 		      * heights[cell / _cx];
 		    
 		    _A[row*(_ng+4)] += value; 
@@ -465,7 +464,7 @@ void Cmfd::constructMatrices(){
 		
 		/* set transport term on diagonal */
 		value = (material->getDifHat()[1*_ng + e] 
-			 - material->getDifTilde()[offset + 1*_ng + e]) 
+			 - material->getDifTilde()[1*_ng + e]) 
 		  * widths[cell % _cx];
 		
 		_A[row*(_ng+4)+e+2] += value;        
@@ -473,7 +472,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on off diagonal */
 		if (y != _cy - 1){
 		    value = - (material->getDifHat()[1*_ng + e] 
-			       + material->getDifTilde()[offset + 1*_ng + e]) 
+			       + material->getDifTilde()[1*_ng + e]) 
 		      * widths[cell % _cx];
 		    
 		    _A[row*(_ng+4)+1] += value; 
@@ -483,7 +482,7 @@ void Cmfd::constructMatrices(){
 		
 		/* set transport term on diagonal */
 		value = (material->getDifHat()[3*_ng + e] 
-			 + material->getDifTilde()[offset + 3*_ng + e]) 
+			 + material->getDifTilde()[3*_ng + e]) 
 		  * widths[cell % _cx];
 		
 		_A[row*(_ng+4)+e+2] += value; 
@@ -491,7 +490,7 @@ void Cmfd::constructMatrices(){
 		/* set transport term on off diagonal */
 		if (y != 0){
 		    value = - (material->getDifHat()[3*_ng + e] 
-			       - material->getDifTilde()[offset + 3*_ng + e]) 
+			       - material->getDifTilde()[3*_ng + e]) 
 		      * widths[cell % _cx];
 		    
 		    _A[row*(_ng+4)+_ng+3] += value; 
