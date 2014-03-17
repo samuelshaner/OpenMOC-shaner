@@ -224,7 +224,7 @@ class configuration:
                                '-Wl,-install_name,' + get_openmoc_object_name()]
     else:
         linker_flags['gcc'] = ['-fopenmp', '-shared',
-                               '-Wl,-soname,' + get_openmoc_object_name()]
+                               '-Wl,-soname,' + get_openmoc_object_name(), '-Wl,-rpath=/opt/gcc/4.6.2/lib64']
 
     linker_flags['icpc'] = [ '-openmp', '-shared', 
                              '-Xlinker', '-soname=' + get_openmoc_object_name()]
@@ -258,6 +258,8 @@ class configuration:
     # if not set in the LD_LIBRARY_PATH environment variable
     library_directories = {}
 
+    #library_directories['gcc'] = [sys.exec_prefix + '/lib', '/opt/gcc/4.6.2/lib64']
+
     if (get_platform()[:6] == 'macosx'):
         library_directories['gcc'] = [sys.exec_prefix + '/lib']
     else:
@@ -277,10 +279,13 @@ class configuration:
     # for header files not found from paths set in the user's environment
     include_directories = {}
 
-    if (get_platform()[:6] == 'macosx' and with_numpy):
-        include_directories['gcc'] = [sys.exec_prefix + '/lib/python' + str(sys.version_info[0]) + '.' + str(sys.version_info[1]) + '/site-packages/numpy/core/include']
-    else:
-        include_directories['gcc'] = []
+    #include_directories['gcc'] = [sys.exec_prefix + '/lib/python' + str(sys.version_info[0]) + '.' + str(sys.version_info[1]) + '/site-packages/numpy/core/include', '/opt/python/2.7/include/python2.7']
+    include_directories['gcc'] = [sys.exec_prefix + '/lib/python' + str(sys.version_info[0]) + '.' + str(sys.version_info[1]) + '/site-packages/numpy/core/include']
+
+    #if (get_platform()[:6] == 'macosx' and with_numpy):
+    #    include_directories['gcc'] = [sys.exec_prefix + '/lib/python' + str(sys.version_info[0]) + '.' + str(sys.version_info[1]) + '/site-packages/numpy/core/include']
+    #else:
+    #    include_directories['gcc'] = []
 
     include_directories['icpc'] =[]
     include_directories['bgxlc'] = ['/usr/lib64/python2.6/site-packages/numpy/core/include']

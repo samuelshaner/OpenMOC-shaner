@@ -145,23 +145,39 @@ def materialize(filename):
                     if 'Absorption XS' in data[name]['FunctionalTemperature']:
                         new_material.sigmaAFuncTemp(True)
 
-            # set sigmaA and time
+            # set time
             if 'FunctionalVariables' in data[name].keys():
                 if 'Time' in data[name]['FunctionalVariables']:
-
                     if 'Time' in data[name].keys():
                         new_material.setTime(data[name]['Time'])
-                    
-                        if 'Absorption XS' in data[name]['FunctionalTime']:
-                            new_material.sigmaAFuncTime(True)
-                            new_material.setSigmaATime(data[name]['Absorption XS'])
+                    else:
+                        py_printf('ERROR', 'If time is a functional variable,' + \
+                                      'you must pass in an array of time values!')
+
+            # set sigmaA
+            if 'FunctionalVariables' in data[name].keys():
+                if 'Time' in data[name]['FunctionalVariables']:
+                    if 'Absorption XS' in data[name]['FunctionalTime']:
+                        new_material.sigmaAFuncTime(True)
+                        new_material.setSigmaATime(data[name]['Absorption XS'])
+                    else:
+                        new_material.setSigmaA(data[name]['Absorption XS'])
                 else:
                     new_material.setSigmaA(data[name]['Absorption XS'])
-
             else:
                 new_material.setSigmaA(data[name]['Absorption XS'])
-            
-            if 'Scattering XS' in data[name].keys():
+
+            # set sigmaS
+            if 'FunctionalVariables' in data[name].keys():
+                if 'Time' in data[name]['FunctionalVariables']:
+                    if 'Scattering XS' in data[name]['FunctionalTime']:
+                        new_material.sigmaSFuncTime(True)
+                        new_material.setSigmaSTime(data[name]['Scattering XS'])
+                    else:
+                        new_material.setSigmaS(data[name]['Scattering XS'])
+                else:
+                    new_material.setSigmaS(data[name]['Scattering XS'])
+            else:
                 new_material.setSigmaS(data[name]['Scattering XS'])
 
             if 'Fission XS' in data[name].keys():
@@ -178,7 +194,6 @@ def materialize(filename):
 
             # compute sigma_t
             new_material.computeSigmaT()
-
               
             # Add this material to the list
             materials[name] = new_material

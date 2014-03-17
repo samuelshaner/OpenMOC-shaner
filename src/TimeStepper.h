@@ -20,9 +20,9 @@ enum materialState {
     PREVIOUS,
     CURRENT,
     FORWARD,
-    FSR,
-    FSR_OLD,
-    FORWARD_PREV
+    FORWARD_PREV,
+    SHAPE,
+    SHAPE_UPDATE
 };
 
 class TimeStepper {
@@ -50,7 +50,7 @@ public:
     /* getters */
     double getStartTime();
     double getEndTime();
-    double getImprovedRatio();
+    double getImprovedRatio(materialState state);
     double getTime(materialState state);
     double getDtMOC();
     double getDtCMFD();

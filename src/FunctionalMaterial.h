@@ -46,6 +46,10 @@ protected:
 
     bool _sigma_a_func_temp;
     bool _sigma_a_func_time;
+    bool _sigma_s_func_time;
+
+    /* flag to adjust inscatter to conserve total xs */
+    bool _conserve_sigma_t;
 
     int _num_time_steps;
 
@@ -60,6 +64,9 @@ public:
 
     /* set sigma a */
     void setSigmaATime(int num_time_steps, int num_groups, double* xs);
+
+    /* set sigma s */
+    void setSigmaSTime(int num_time_steps, int num_groups, double* xs);
     
     /* copy and clone material */
     virtual FunctionalMaterial* clone();
@@ -73,7 +80,9 @@ public:
 
     /* set bool for time functional properties */
     virtual void setSigmaA(double* xs, int num_groups);
+    virtual void setSigmaS(double* xs, int num_groups);
     void sigmaAFuncTime(bool func_time);
+    void sigmaSFuncTime(bool func_time);
 
     /* set and get gamma, the doppler feedback coefficient */
     void setGamma(double* gamma, int num_groups);
@@ -82,8 +91,12 @@ public:
     /* sync material properties to a particular state */
     void sync(materialState state);
 
+
+    void copySigmaSRef(Material* material);
+
     /* interpolate a particular cross section */
     double interpolateXS(double* xs_vec, materialState state, int group);
+    double interpolateScatterXS(double* xs_vec, materialState state, int group_from, int group_to);
 
     /* get and set transient material properties */
     void setPrecConc(materialState state, double conc, int group);
@@ -97,9 +110,7 @@ public:
     /* set time stepper */
     void setTimeStepper(TimeStepper* ts);
 
-    /* set material properties by state and group */
-    double getSigmaAByValue(materialState state, int group);
-
+    void setConserveSigmaT(bool conserve_sigma_t);
 };
 
 

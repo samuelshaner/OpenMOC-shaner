@@ -53,7 +53,8 @@ protected:
 
 
   /* float values */
-  double _conv_criteria;
+  double _conv_linear;
+  double _conv_nonlinear;
   double _omega;
 
   /* integer values */
@@ -71,7 +72,7 @@ protected:
 
 public:
 	
-  Cmfd(Geometry* geometry, double criteria=1e-8);
+  Cmfd(Geometry* geometry, double conv_linear=1.e-8, double conv_nonlinear=1.e-6);
   virtual ~Cmfd();
 
   virtual void constructMatrices();

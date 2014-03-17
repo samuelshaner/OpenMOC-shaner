@@ -42,9 +42,9 @@ void TimeStepper::setTime(materialState state, double time){
 }
 
 
-double TimeStepper::getImprovedRatio(){
+double TimeStepper::getImprovedRatio(materialState state){
 
-    double ratio = (_state_times[int(CURRENT)] - _state_times[int(PREVIOUS_CONV)]) / _dt_moc;
+    double ratio = (_state_times[int(state)] - _state_times[int(PREVIOUS_CONV)]) / _dt_moc;
     return ratio;
 }
 

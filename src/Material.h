@@ -70,6 +70,7 @@ protected:
     /** A 2D array of the scattering cross-section matrix. The first index is 
      *  row number and second index is column number */
     double* _sigma_s; 
+    double* _sigma_s_ref;
 
     /** An array of the fission cross-sections for each energy group */
     double* _sigma_f;
@@ -122,6 +123,7 @@ public:
     double* getSigmaT();
     double* getSigmaA(); 
     double* getSigmaS();
+    double* getSigmaSRef();
     double* getSigmaF();
     double* getNuSigmaF();
     double* getChi();
@@ -136,7 +138,7 @@ public:
     virtual void setNumEnergyGroups(const int num_groups);
     void setSigmaT(double* xs, int num_groups);
     virtual void setSigmaA(double* xs, int num_groups);
-    void setSigmaS(double* xs, int num_groups);
+    virtual void setSigmaS(double* xs, int num_groups);
     void setSigmaF(double* xs, int num_groups);
     void setNuSigmaF(double* xs, int num_groups);
     void setChi(double* xs, int num_groups);
@@ -153,7 +155,7 @@ public:
     void setBucklingByGroup(double xs, int group);
     void setDifCoefByGroup(double xs, int group);
     void setDifHatByGroup(double xs, int group, int surface);
-    void setDifTildeByGroup(double xs, int group, int surface);
+    void setDifTildeByGroup(double xs, int group, int surface, materialState state=FORWARD);
 
     void checkSigmaT();
     std::string toString();

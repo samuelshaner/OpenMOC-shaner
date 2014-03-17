@@ -16,8 +16,8 @@ max_iters = options.max_iters
 relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
-dt_cmfd = 1.e-3
-dt_moc  = 5.e-2
+dt_cmfd = 1.e-4
+dt_moc  = 1.e-2
 log.setLogLevel('NORMAL')
 
 ###############################################################################

@@ -22,6 +22,7 @@
 #include "Quadrature.h"
 #include "TimeStepper.h"
 #include "Timer.h"
+#include "linalg_functions.h"
 
 /**
  * Solve types
@@ -63,6 +64,9 @@ private:
   int _num_groups;
   int _num_delay_groups;
 
+  /* number of surface current values */
+  int _num_currents;
+
   /* number of fsrs */
   int _num_fsrs;
 
@@ -74,6 +78,9 @@ private:
 
   /* array of mesh cell volumes */
   double* _volumes;
+
+  /* array of mesh surface currents */
+  double* _currents;
 
   /* vector of vectors of fsrs in each mesh cell */
   std::vector< std::vector<int> > _cell_fsrs;
@@ -87,8 +94,9 @@ private:
 
   /* map of fluxes mapped onto mesh */
   std::map<materialState, double*> _fluxes;
-  std::map<materialState, double*> _currents;
-  std::map<materialState, double*> _frequency;
+  
+  /* frequency array */
+  double* _frequency;
 
   /* map of fsrs to cells */
   int* _FSRs_to_cells;
@@ -134,8 +142,8 @@ public:
   void setFSRBounds();
   void setCellBounds();
 
-  void computeDs(double relax_factor=-1.0, materialState state=FSR_OLD);
-  void computeXS(Mesh* mesh=NULL, materialState state=FSR);
+  void computeDs(double relax_factor=-1.0, materialState state=SHAPE);
+  void computeXS(Mesh* mesh=NULL, materialState state=SHAPE);
   double computeDiffCorrect(double d, double h);
   void updateMOCFlux();
 
@@ -146,15 +154,16 @@ public:
   int getCellsY();
   int getNumCells();
   boundaryType getBoundary(int side);
+  int getNumCurrents();
   double getFlux(int cell_id, int group, materialState state=CURRENT);
   std::vector<std::vector<int> >* getCellFSRs();
   Material** getMaterials();
   double* getVolumes();
   double* getFluxes(materialState state);
-  double* getFrequencies(materialState state);
+  double* getFrequency();
   double* getLengthsX();
   double* getLengthsY();
-  double* getCurrents(materialState state);
+  double* getCurrents();
   int getMeshLevel();
   
   /* set mesh parameters */
@@ -167,6 +176,8 @@ public:
   void setSurfaceCurrents(double* surface_currents);
   void setVolume(double volume, int cell_num);
   void setMeshLevel(int cmfd_level);
+  void setFlux(materialState state, double* flux);
+  void eraseFlux(materialState state);
 
   /* set general problem specs */
   void setNumGroups(int num_groups);
@@ -196,11 +207,8 @@ public:
   void initializeMaterials(std::map<int, Material*>* materials, int* fsrs_to_mats);
   void initializeSurfaceCurrents();
   void createNewFlux(materialState state);
-  void createNewFrequency(materialState state);
-  void createNewCurrent(materialState state);
   void copyFlux(materialState from_state, materialState to_state);
-  void copyFrequency(materialState from_state, materialState to_state);
-  void copyCurrent(materialState from_state, materialState to_state);
+  void copyDs(materialState from_state, materialState to_state);
   void dumpFlux(materialState state);
   void dumpXS();
 
@@ -236,7 +244,7 @@ public:
 
   void reconstructFineFlux(double* geom_shape, double* mesh_flux);
   void computeFineShape(double* geom_shape, double* mesh_flux);
-  void interpolateCurrent(double ratio);
+  void interpolateDs(double ratio);
   void interpolateFlux(double ratio);
   void normalizeFlux(double scale_val);
   void normalizeDs(double scale_val);

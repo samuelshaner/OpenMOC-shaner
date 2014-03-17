@@ -16,7 +16,7 @@ relax_factor = options.relax_factor
 acceleration = options.acceleration
 mesh_level = options.mesh_level
 dt_cmfd = 1e-4
-dt_moc = 5e-3
+dt_moc = 1e-3
 log.setLogLevel('NORMAL')
 
 ###############################################################################
@@ -266,14 +266,14 @@ tcmfd.setVelocity([3e7, 3e5])
 transientSolver = TransientSolver(geometry, tcmfd, cmfd, solver)
 transientSolver.setKappa(3.204e-11)
 transientSolver.setAlpha(3.83e-11)
-transientSolver.setNu(2.43)
 transientSolver.setDtMOC(dt_moc)
 transientSolver.setDtCMFD(dt_cmfd)
 transientSolver.setStartTime(0.0)
 transientSolver.setEndTime(3.0)
 transientSolver.setNumDelayGroups(2)
-transientSolver.setTransientMethod('ADIABATIC')
+transientSolver.setTransientMethod('MAF')
 transientSolver.setPowerInit(1.e-6)
+#transientSolver.setProlongation(True)
 
 transientSolver.solveInitialState()
 

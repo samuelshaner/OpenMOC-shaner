@@ -13,7 +13,10 @@ FunctionalMaterial::FunctionalMaterial(short int id) : Material(id){
   
   _sigma_a_func_temp = false;  
   _sigma_a_func_time = false;
+  _sigma_s_func_time = false;
+  _conserve_sigma_t  = true;
   _sigma_a_ref = NULL;
+  _sigma_s_ref = NULL;
 
   _temperature = new double[6];
   
@@ -31,6 +34,9 @@ FunctionalMaterial::~FunctionalMaterial() {
 
   if (_sigma_a_ref != NULL)
     delete [] _sigma_a_ref;  
+
+  if (_sigma_s_ref != NULL)
+    delete [] _sigma_s_ref;  
 }
 
 
@@ -53,14 +59,22 @@ void FunctionalMaterial::setNumEnergyGroups(const int num_groups, const int num_
   _num_time_steps = num_time_steps;
 
   _sigma_a_ref = new double[num_groups*num_time_steps];
+  _sigma_s_ref = new double[num_groups*num_groups*num_time_steps];
+
+  for (int i = 0; i < num_groups*num_time_steps; i++)
+    _sigma_a_ref[i] = 0.0;
+
+  for (int i = 0; i < num_groups*num_groups*num_time_steps; i++)
+    _sigma_s_ref[i] = 0.0;
+
   _gamma = new double[num_groups];
 }
 
 
 /**
- * @brief Set the material's array of absorption scattering cross-sections.
+ * @brief Set the material's array of absorption cross-sections.
  * @details This method is intended to be called from 
- * @param xs the array of absorption scattering cross-sections
+ * @param xs the array of absorption cross-sections
  * @param num_groups the number of energy groups
  */
 void FunctionalMaterial::setSigmaA(double* xs, int num_groups) {
@@ -78,9 +92,32 @@ void FunctionalMaterial::setSigmaA(double* xs, int num_groups) {
 
 
 /**
- * @brief Set the material's array of absorption scattering cross-sections.
+ * @brief Set the material's array of scattering cross-sections.
+ * @details This method is intended to be called from 
+ * @param xs the array of scattering cross-sections
+ * @param num_groups the number of energy groups
+ */
+void FunctionalMaterial::setSigmaS(double* xs, int num_groups_squared) {
+
+    if (_num_groups*_num_groups != num_groups_squared)
+	log_printf(ERROR, "Unable to set sigma_s with %d groups for material "
+		   "%d which contains %d energy groups", float(sqrt(num_groups_squared)), _id,
+		   _num_groups);
+  
+    Material::setSigmaS(xs, num_groups_squared);
+    
+    for (int i=0; i < _num_groups; i++) {
+      for (int j=0; j < _num_groups; j++){
+	_sigma_s_ref[j*_num_groups+i] = xs[i*_num_groups+j];
+      }   
+    }
+}
+
+
+/**
+ * @brief Set the material's array of absorption cross-sections.
  * @details This method is intended to be called from
- * @param xs the array of absorption scattering cross-sections
+ * @param xs the array of absorption cross-sections
  * @param num_groups the number of energy groups
  */
 void FunctionalMaterial::setSigmaATime(int num_time_steps, int num_groups, double* xs) {
@@ -104,6 +141,39 @@ void FunctionalMaterial::setSigmaATime(int num_time_steps, int num_groups, doubl
 }
 
 
+/**
+ * @brief Set the material's array of scattering cross-sections.
+ * @details This method is intended to be called from
+ * @param xs the array of scattering cross-sections
+ * @param num_groups the number of energy groups
+ */
+void FunctionalMaterial::setSigmaSTime(int num_time_steps, int num_groups_squared, double* xs) {
+
+  if (_num_groups != int(sqrt(num_groups_squared)))
+    log_printf(ERROR, "Unable to set sigma_s with %d groups for material "
+	       "%d which contains %d energy groups", int(sqrt(num_groups_squared)),
+	       _num_groups);
+
+  int ng = _num_groups;
+
+  /* set the reference scattering xs array */
+  for (int i = 0; i < num_time_steps; i++){
+    for (int k=0; k < ng; k++) {
+      for (int j=0; j < ng; j++){
+	_sigma_s_ref[i*ng*ng + j*ng + k] = xs[i*ng*ng + k*ng + j];
+      }   
+    }
+  }
+
+  /* set the callable scattering xs array */
+  for (int k=0; k < ng; k++) {
+    for (int j=0; j < ng; j++){
+      _sigma_s[j*ng + k] = xs[k*ng + j];
+    }   
+  }
+}
+
+
 FunctionalMaterial* FunctionalMaterial::clone(){
 
   FunctionalMaterial* to_mat = new FunctionalMaterial(getId());
@@ -111,6 +181,8 @@ FunctionalMaterial* FunctionalMaterial::clone(){
   /* copy flags */
   to_mat->sigmaAFuncTime(_sigma_a_func_time);
   to_mat->sigmaAFuncTemp(_sigma_a_func_temp);
+  to_mat->sigmaSFuncTime(_sigma_s_func_time);
+  to_mat->setConserveSigmaT(_conserve_sigma_t);
 
   /* set num energy groups */
   to_mat->setNumEnergyGroups(_num_groups, _num_time_steps);
@@ -118,6 +190,7 @@ FunctionalMaterial* FunctionalMaterial::clone(){
   /* copy xs */
   to_mat->setSigmaT(_sigma_t, _num_groups);
   copySigmaS(to_mat);
+  copySigmaSRef(to_mat);
   to_mat->setSigmaF(_sigma_f, _num_groups);
   to_mat->setNuSigmaF(_nu_sigma_f, _num_groups);
   to_mat->setChi(_chi, _num_groups);
@@ -132,12 +205,13 @@ FunctionalMaterial* FunctionalMaterial::clone(){
     to_mat->setSigmaATime(_num_time_steps, _num_groups, _sigma_a_ref);
   else
     to_mat->setSigmaA(_sigma_a_ref, _num_groups);
-  
+
   to_mat->setTemperature(PREVIOUS, getTemperature(PREVIOUS));
   to_mat->setTemperature(PREVIOUS_CONV, getTemperature(PREVIOUS_CONV));
   to_mat->setTemperature(CURRENT, getTemperature(CURRENT));
   to_mat->setTemperature(FORWARD, getTemperature(FORWARD));
-  to_mat->setTemperature(FSR, getTemperature(FSR));
+  to_mat->setTemperature(FORWARD_PREV, getTemperature(FORWARD_PREV));
+  to_mat->setTemperature(SHAPE, getTemperature(SHAPE));
 
   if (_gamma != NULL)
     to_mat->setGamma(_gamma, _num_groups);
@@ -175,11 +249,16 @@ void FunctionalMaterial::sigmaAFuncTime(bool func_time){
   _sigma_a_func_time = func_time;
 }
 
+void FunctionalMaterial::sigmaSFuncTime(bool func_time){
+  _sigma_s_func_time = func_time;
+}
+
 
 /* sync current cross sections with current time and temperature */
 void FunctionalMaterial::sync(materialState state){
   
     double sigma_s_out;
+    double sigma_s_group;
     
     /* SIGMA_A */
     for (int g = 0; g < _num_groups; g++){
@@ -195,17 +274,40 @@ void FunctionalMaterial::sync(materialState state){
 	    _sigma_a[g] = _sigma_a[g] * (1.0 + _gamma[g] * 
 	                  (pow(getTemperature(state),0.5) - pow(300.0, 0.5)));
 
-	/* adjust self scattering to conserve total xs */
-	for (int G = 0; G < _num_groups; G++){
+	if (_conserve_sigma_t){
+
+	  /* adjust self scattering to conserve total xs */
+	  for (int G = 0; G < _num_groups; G++){
             if (G != g)
-	        sigma_s_out += _sigma_s[G*_num_groups + g];
-	}
+	      sigma_s_out += _sigma_s[G*_num_groups + g];
+	  }
       
-	_sigma_s[g*_num_groups + g] = 1.0 / (3.0 * _dif_coef[g]) - _sigma_a[g] - sigma_s_out;    
+	  _sigma_s[g*_num_groups + g] = 1.0 / (3.0 * _dif_coef[g]) - _sigma_a[g] - sigma_s_out;    
+	  
+	  _sigma_a[g] += _dif_coef[g] * _buckling[g];
+	  
+	  _sigma_t[g] = _sigma_a[g] + sigma_s_out + _sigma_s[g*_num_groups + g];
+	}
+	else{
 
-	_sigma_a[g] += _dif_coef[g] * _buckling[g];
+	  sigma_s_group = 0.0;
 
-	_sigma_t[g] = _sigma_a[g] + sigma_s_out + _sigma_s[g*_num_groups + g];
+	  /* sync scattering cross section */
+	  if (_sigma_s_func_time){
+	    for (int G = 0; G < _num_groups; G++){
+	      _sigma_s[G*_num_groups + g] = interpolateScatterXS(_sigma_s_ref, state, g, G);
+	      sigma_s_group += _sigma_s[G*_num_groups + g];
+	    }
+	  }
+	  else{
+	    for (int G = 0; G < _num_groups; G++){
+	      sigma_s_group += _sigma_s[G*_num_groups + g];
+	    }
+	  }
+
+	  /* recompute sigma_t */
+	  _sigma_t[g] = _sigma_a[g] + sigma_s_group;
+	}
     }
 }
 
@@ -241,11 +343,32 @@ double FunctionalMaterial::interpolateXS(double* xs_ref, materialState state, in
 }
 
 
+double FunctionalMaterial::interpolateScatterXS(double* xs_ref, materialState state, int group_from, int group_to){
+
+  double time = _ts->getTime(state);
+  double dt, dxs;
+  int ng = _num_groups;
+  double xs = xs_ref[group_to*ng + group_from];
+
+
+  for (int i = 1; i < _num_time_steps; i++){
+    if (time < _time[i] + 1e-8){
+      dt = _time[i] - _time[i-1];
+      dxs = xs_ref[i*ng*ng + group_to*ng + group_from] - xs_ref[(i-1)*ng*ng + group_to*ng + group_from];
+      xs = xs_ref[(i-1)*ng*ng + group_to*ng + group_from] + (time - _time[i-1]) / dt * dxs;
+      break;
+    }
+  }
+  
+  return xs;
+}
+
+
 void FunctionalMaterial::initializeTransientProps(double num_delay_groups, bool cmfd_mesh){
 
   _num_delay_groups = num_delay_groups;
-  _prec_conc = new double[_num_delay_groups*7];
-  _prec_freq = new double[_num_delay_groups*7];
+  _prec_conc = new double[_num_delay_groups*6];
+  _prec_freq = new double[_num_delay_groups*6];
 
 }
 
@@ -283,19 +406,15 @@ void FunctionalMaterial::setTimeStepper(TimeStepper* ts){
 }
 
 
-/**
- * @brief Return the array of the material's absorption cross-sections.
- * @return the pointer to the material's array of absorption cross-sections
- */
-double FunctionalMaterial::getSigmaAByValue(materialState state, int group) {
+void FunctionalMaterial::setConserveSigmaT(bool conserve_sigma_t){
+  _conserve_sigma_t = conserve_sigma_t;
+}
 
-  double xs = _sigma_a_ref[group];
-  
-  if (_sigma_a_func_time)
-    xs = interpolateXS(_sigma_a_ref, state, group);
-  
-  if (_sigma_a_func_temp)
-      xs = xs * (1.0 + _gamma[group] * (pow(getTemperature(state),0.5) - pow(300.0, 0.5)));
-  
-  return xs;
+
+void FunctionalMaterial::copySigmaSRef(Material* material){
+
+  double* xs_ref = material->getSigmaSRef();
+
+  for (int i = 0; i < _num_time_steps*_num_groups*_num_groups; i++)
+    xs_ref[i] = _sigma_s_ref[i];
 }

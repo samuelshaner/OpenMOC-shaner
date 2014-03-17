@@ -459,25 +459,6 @@ FP_PRECISION Solver::convergeSource(int max_iterations) {
 	    return _k_eff;
 	}
 
-	/* Check for divergence of the fission source distribution */
-	if (_cmfd->getMesh()->getAcceleration()){
-	    if (fabs(_k_eff - keff_old) < _source_convergence_thresh*1e-3 &&
-		fabs(residual - residual_old) < _source_convergence_thresh*1e-2){
-		log_printf(WARNING, "Convergence was determined based on keff convergence");
-		_timer->stopTimer();
-		_timer->recordSplit("Total time to converge the source");
-		return _k_eff;
-	    }
-
-	    if (i > 10 && residual > residual_old*10){
-		log_printf(ERROR, "The residual from iteration %i is greater "
-			   "than the source from iteration %i which indicates "
-			   "the solution is likely diverging. If CMFD "
-			   " is turned on, please run the simulation again "
-			   "with CMFD acceleration turned off.", i, i-1);
-	    }
-	}
-
 	residual_old = residual;
 	keff_old = _k_eff;
     }

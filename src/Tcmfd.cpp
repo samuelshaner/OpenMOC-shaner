@@ -57,8 +57,8 @@ Tcmfd::Tcmfd(Geometry* geometry, double criteria){
     _initial_state = true;
 
     /* If solving diffusion problem, create arrays for FSR parameters */
-    //if (_solve_method == DIFFUSION)
-    //_mesh->initializeSurfaceCurrents();
+    if (_solve_method == DIFFUSION)
+	_mesh->initializeSurfaceCurrents();
     
 }
 
@@ -117,7 +117,7 @@ void Tcmfd::solveTCMFD(){
     /* solve inverse system */
     _timer->startTimer();
     linearSolveRB(_AM, _phi_new, _b, _phi_temp, _conv_criteria, 
-		  _omega, _cells_x, _cells_y, _num_groups, 10000);
+		  _omega, _cells_x, _cells_y, _num_groups, 10000, _M);
     _timer->stopTimer();
     _timer->recordSplit("TCMFD linear system solve");
 
@@ -138,6 +138,7 @@ void Tcmfd::constructMatrices(bool frequency){
     int row;
     double value;
     int cell;
+    int offset = int(CURRENT)*_num_groups*4;
     
     Material **materials = _mesh->getMaterials();
     double* heights = _mesh->getLengthsY();
@@ -199,7 +200,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		
 		/* set transport term on diagonal */
 		value = (materials[cell]->getDifHat()[2*_num_groups + e] 
-			 - materials[cell]->getDifTilde()[2*_num_groups + e]) 
+			 - materials[cell]->getDifTilde()[offset + 2*_num_groups + e]) 
 		  * heights[cell / _cells_x];
 		
 		_A[row*(_num_groups+4)+e+2] += value;
@@ -207,7 +208,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		/* set transport term on off diagonal */
 		if (x != _cells_x - 1){
 		    value = - (materials[cell]->getDifHat()[2*_num_groups + e] 
-			       + materials[cell]->getDifTilde()[2*_num_groups + e]) 
+			       + materials[cell]->getDifTilde()[offset + 2*_num_groups + e]) 
 		      * heights[cell / _cells_x];
 		    
 		    _A[row*(_num_groups+4)+_num_groups+2] += value; 
@@ -217,7 +218,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		
 		/* set transport term on diagonal */
 		value = (materials[cell]->getDifHat()[0*_num_groups + e] 
-			 + materials[cell]->getDifTilde()[0*_num_groups + e]) 
+			 + materials[cell]->getDifTilde()[offset + 0*_num_groups + e]) 
 		  * heights[cell / _cells_x];
 		
 		_A[row*(_num_groups+4)+e+2] += value;
@@ -225,7 +226,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		/* set transport term on off diagonal */
 		if (x != 0){
 		    value = - (materials[cell]->getDifHat()[0*_num_groups + e] 
-			       - materials[cell]->getDifTilde()[0*_num_groups + e]) 
+			       - materials[cell]->getDifTilde()[offset + 0*_num_groups + e]) 
 		      * heights[cell / _cells_x];
 		    
 		    _A[row*(_num_groups+4)] += value; 
@@ -235,7 +236,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		
 		/* set transport term on diagonal */
 		value = (materials[cell]->getDifHat()[1*_num_groups + e] 
-			 - materials[cell]->getDifTilde()[1*_num_groups + e]) 
+			 - materials[cell]->getDifTilde()[offset + 1*_num_groups + e]) 
 		  * widths[cell % _cells_x];
 		
 		_A[row*(_num_groups+4)+e+2] += value;
@@ -243,7 +244,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		/* set transport term on off diagonal */
 		if (y != _cells_y - 1){
 		    value = - (materials[cell]->getDifHat()[1*_num_groups + e] 
-			       + materials[cell]->getDifTilde()[1*_num_groups + e]) 
+			       + materials[cell]->getDifTilde()[offset + 1*_num_groups + e]) 
 		      * widths[cell % _cells_x];
 		    
 		    _A[row*(_num_groups+4)+1] += value; 
@@ -253,7 +254,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		
 		/* set transport term on diagonal */
 		value = (materials[cell]->getDifHat()[3*_num_groups + e] 
-			 + materials[cell]->getDifTilde()[3*_num_groups + e]) 
+			 + materials[cell]->getDifTilde()[offset + 3*_num_groups + e]) 
 		  * widths[cell % _cells_x];
 		
 		_A[row*(_num_groups+4)+e+2] += value;
@@ -261,7 +262,7 @@ void Tcmfd::constructMatrices(bool frequency){
 		/* set transport term on off diagonal */
 		if (y != 0){
 		    value = - (materials[cell]->getDifHat()[3*_num_groups + e] 
-			       - materials[cell]->getDifTilde()[3*_num_groups + e]) 
+			       - materials[cell]->getDifTilde()[offset + 3*_num_groups + e]) 
 		      * widths[cell % _cells_x];
 		    
 		    _A[row*(_num_groups+4)+_num_groups+3] += value; 
@@ -421,7 +422,7 @@ void Tcmfd::checkNeutronBalance2(){
 
 void Tcmfd::computeFrequency(){
 
-    double* frequency = _mesh->getFrequencies(CURRENT);
+    double* frequency = _mesh->getFrequency();
     double* volumes = _mesh->getVolumes();
 
     vecZero(frequency, _nc);

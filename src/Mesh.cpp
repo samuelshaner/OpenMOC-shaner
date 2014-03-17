@@ -24,6 +24,7 @@ Mesh::Mesh(solveType solve_type, bool cmfd_on, double relax_factor, int mesh_lev
   _num_groups = 0;
   _num_fsrs = 0;
   _num_azim = 0;
+  _num_currents = 0;
   _cells_x = 0;
   _cells_y = 0;
   _mesh_level = mesh_level;
@@ -97,36 +98,32 @@ void Mesh::initialize(){
     /* allocate memory for FSRs to cells map */
     _FSRs_to_cells = new int[_num_fsrs];
     
-    double* freq_cur;
-    double* freq_pre;
-    freq_cur = new double[_cells_x*_cells_y*_num_groups];
-    freq_pre = new double[_cells_x*_cells_y*_num_groups];
-    _frequency.insert(std::pair<materialState, double*>(PREVIOUS, freq_cur));
-    _frequency.insert(std::pair<materialState, double*>(CURRENT, freq_pre));
+    /* allocate memory for frequency array */
+    _frequency = new double[_cells_x*_cells_y*_num_groups];
 
     /* allocate memory for fluxes */
-    double* flux_fsr;
-    double* flux_cur;
-    flux_fsr = new double[_cells_x*_cells_y*_num_groups];
-    flux_cur = new double[_cells_x*_cells_y*_num_groups];
-    _fluxes.insert(std::pair<materialState, double*>(FSR_OLD, flux_fsr));
-    _fluxes.insert(std::pair<materialState, double*>(CURRENT, flux_cur));
+    double* flux_shape;
+    double* flux_shape_update;
+    flux_shape = new double[_cells_x*_cells_y*_num_groups];
+    flux_shape_update = new double[_cells_x*_cells_y*_num_groups];
+    _fluxes.insert(std::pair<materialState, double*>(SHAPE, flux_shape));
+    _fluxes.insert(std::pair<materialState, double*>(SHAPE_UPDATE, flux_shape_update));
     
     /* allocate memory for cell widths, heights, and bounds */
     _lengths_x = new double[_cells_x];
     _lengths_y = new double[_cells_y];
     _bounds_x  = new double[_cells_x+1];
     _bounds_y  = new double[_cells_y+1];
+    _num_currents = _cells_x*_cells_y*8;
     
     /* set initial mesh cell flux to 1.0 and allocate memory for fsr vectors */
     for (int y = 0; y < _cells_y; y++){
 	for (int x = 0; x < _cells_x; x++){
 	    
 	    for (int g = 0; g < _num_groups; g++){
-	        flux_fsr[(y*_cells_x+x)*_num_groups + g] = 1.0;
-	        flux_cur[(y*_cells_x+x)*_num_groups + g] = 1.0;
-		freq_cur[(y*_cells_x+x)*_num_groups + g] = 0.0;
-		freq_pre[(y*_cells_x+x)*_num_groups + g] = 0.0;
+	        flux_shape[(y*_cells_x+x)*_num_groups + g] = 1.0;
+	        flux_shape_update[(y*_cells_x+x)*_num_groups + g] = 1.0;
+		_frequency[(y*_cells_x+x)*_num_groups + g] = 0.0;
 	    }
 
 	    /* allocate memory for fsr vector */
@@ -149,33 +146,34 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
     splitCorners();
     
     /* initialize variables for FSR properties*/
-    double volume, flux, abs, tot, nu_fis, chi, dif_coef;
+    double volume, flux, abs, tot, nu_fis, chi, dif_coef, fis;
     double* scat;
-    double* fluxes = getFluxes(FSR_OLD);
+    double* coarse_flux = getFluxes(state);
 
     /* initialize tallies for each parameter */
-    double abs_tally, nu_fis_tally, dif_tally, rxn_tally, vol_tally, tot_tally;
+    double abs_tally, nu_fis_tally, dif_tally, rxn_tally, vol_tally, tot_tally, fis_tally;
     double scat_tally[_num_groups];
-        
+    
+    /* interator to loop over fsrs in each mesh cell */
+    std::vector<int>::iterator iter;
+    
     /* create pointers to objects */
     Material* fsr_material;
     Material* cell_material;
    
     /* loop over mesh cells */
-    #pragma omp parallel for private(volume, flux, abs, tot, nu_fis, chi, \
-     dif_coef, scat, abs_tally, nu_fis_tally, dif_tally, rxn_tally, \
-     vol_tally, tot_tally, scat_tally, fsr_material, cell_material)
+    #pragma omp parallel for private(volume, flux, abs, tot, nu_fis, chi, fis, \
+     dif_coef, scat, abs_tally, nu_fis_tally, dif_tally, rxn_tally, fis_tally, \
+     vol_tally, tot_tally, scat_tally, iter, fsr_material, cell_material)
     for (int i = 0; i < _cells_x * _cells_y; i++){
 	
-        /* interator to loop over fsrs in each mesh cell */
-        std::vector<int>::iterator iter;
-
 	/* loop over energy groups */
 	for (int e = 0; e < _num_groups; e++) {
 	    
 	    /* zero tallies for this group */
 	    abs_tally = 0;
 	    nu_fis_tally = 0;
+	    fis_tally = 0;
 	    dif_tally = 0;
 	    rxn_tally = 0;
 	    vol_tally = 0;
@@ -193,14 +191,7 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
 		fsr_material = _FSR_materials[*iter];
 		cell_material = _materials[i];
 		volume = _FSR_volumes[*iter];
-		if (state == FSR){
-		    flux = _FSR_fluxes[(*iter)*_num_groups+e];
-		}
-		else{
-		    flux = geom_mesh->getFluxes(state)[(*iter)*_num_groups+e] 
-			* getFluxes(CURRENT)[i*_num_groups+e] * _volumes[i] / _velocity[e];
-		}
-
+		flux = _FSR_fluxes[(*iter)*_num_groups+e];
 		abs = fsr_material->getSigmaA()[e];
 		tot = fsr_material->getSigmaT()[e];
 		scat = fsr_material->getSigmaS();
@@ -221,15 +212,20 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
 		    chi = 0.0;
 		
 		/* if material has a nu_sig_f, use it; otherwise set to 0 */
-		if (fsr_material->getNuSigmaF()[e] > 1e-8)
+		if (fsr_material->getNuSigmaF()[e] > 1e-8){
 		    nu_fis = fsr_material->getNuSigmaF()[e];
-		else
+		    fis = fsr_material->getSigmaF()[e];
+		}
+		else{
 		    nu_fis = 0.0;
+		    fis = 0.0;
+		}
 		
 		/* increment tallies for this group */
 		abs_tally += abs * flux * volume;
 		tot_tally += tot * flux * volume;
 		nu_fis_tally += nu_fis * flux * volume;
+		fis_tally += fis * flux * volume;
 		rxn_tally += flux * volume;
 		vol_tally += volume;
 		for (int g = 0; g < _num_groups; g++)
@@ -240,17 +236,20 @@ void Mesh::computeXS(Mesh* geom_mesh, materialState state){
 		    cell_material->setChiByGroup(chi,e);
 	    }
 	    
+	    if (!_initial_state)
+		log_printf(DEBUG, "c: %i, g: %i, t: %f, v: %f, f: %f", i, e, fabs(tot_tally/rxn_tally - cell_material->getSigmaT()[e]), fabs(vol_tally - _volumes[i]), fabs(rxn_tally/vol_tally - coarse_flux[i*_num_groups+e])); 
+
 	    /* set the mesh cell properties with the tallies */
 	    _volumes[i] = vol_tally;
 	    cell_material->setSigmaAByGroup(abs_tally / rxn_tally, e);
 	    cell_material->setSigmaTByGroup(tot_tally / rxn_tally, e);
 	    cell_material->setNuSigmaFByGroup(nu_fis_tally / rxn_tally, e);
+	    cell_material->setSigmaFByGroup(fis_tally / rxn_tally, e);
 	    cell_material->setDifCoefByGroup(dif_tally / rxn_tally, e);
-	    if (state == FSR)
-	      fluxes[i*_num_groups+e] = rxn_tally / vol_tally;      
+	    if (state == SHAPE)
+	      coarse_flux[i*_num_groups+e] = rxn_tally / vol_tally;      
 	    
-	    log_printf(DEBUG, "cell: %i, group: %i, vol: %f, siga: %f, sigt: %f, nu_sigf: %f, dif_coef: %f, flux: %f", i, e, vol_tally, abs_tally / rxn_tally, 
-		       tot_tally / rxn_tally, nu_fis_tally / rxn_tally, dif_tally / rxn_tally, rxn_tally / vol_tally);
+	    log_printf(DEBUG, "cell: %i, group: %i, vol: %f, siga: %f, sigt: %f, nu_sigf: %f, dif_coef: %f, flux: %f", i, e, vol_tally, abs_tally / rxn_tally, tot_tally / rxn_tally, nu_fis_tally / rxn_tally, dif_tally / rxn_tally, rxn_tally / vol_tally);
 	    
 	    for (int g = 0; g < _num_groups; g++){
 		cell_material->setSigmaSByGroup(scat_tally[g] / rxn_tally, g, e);
@@ -282,9 +281,8 @@ void Mesh::computeDs(double relax_factor, materialState state){
     int next_surface;
     int cell, cell_next;
 
-    double* fluxes = getFluxes(state);
-    double* currents = getCurrents(state);
-
+    double* coarse_flux = getFluxes(state);
+    
     /* loop over mesh cells in y direction */
     #pragma omp parallel for private(d, d_next, d_hat, d_tilde, current, flux, \
       flux_next, f, f_next, length, length_perpen, next_length_perpen, sense, \
@@ -304,7 +302,7 @@ void Mesh::computeDs(double relax_factor, materialState state){
 		    
 		    /* get diffusivity and flux for mesh cell */
 		    d = _materials[cell]->getDifCoef()[e];
-		    flux = fluxes[cell*_num_groups+e];
+		    flux = coarse_flux[cell*_num_groups+e];
 		    cell_next = getCellNext(cell, surface);
 		    
 		    /* set sense of the surface */
@@ -330,7 +328,7 @@ void Mesh::computeDs(double relax_factor, materialState state){
 		    /* if surface is on a boundary, choose appropriate BCs */
 		    if (cell_next == -1){
 			
-			current = sense * currents[cell*_num_groups*8 + surface*_num_groups + e];
+			current = sense * _currents[cell*_num_groups*8 + surface*_num_groups + e];
 			
 			/* REFLECTIVE BC */
 			if (getBoundary(surface) == REFLECTIVE){ 
@@ -382,7 +380,7 @@ void Mesh::computeDs(double relax_factor, materialState state){
 			
 			/* set diffusion coefficient and flux for neighboring cell */
 			d_next = _materials[cell_next]->getDifCoef()[e];
-			flux_next = fluxes[cell_next*_num_groups + e];
+			flux_next = coarse_flux[cell_next*_num_groups + e];
 			
 			/* get optical thickness correction term for meshCellNext */
 			f_next = computeDiffCorrect(d_next, next_length_perpen);
@@ -391,8 +389,8 @@ void Mesh::computeDs(double relax_factor, materialState state){
 			d_hat = 2.0 * d * f * d_next * f_next / (length_perpen * d * f + next_length_perpen * d_next*f_next);
 			
 			/* compute net current */
-			current = sense * currents[cell*_num_groups*8 + surface*_num_groups + e]
-			    - sense * currents[cell_next*_num_groups*8 + next_surface*_num_groups + e];
+			current = sense * _currents[cell*_num_groups*8 + surface*_num_groups + e]
+			    - sense * _currents[cell_next*_num_groups*8 + next_surface*_num_groups + e];
 			
 			/* compute d_tilde */
 			if (_solve_method == MOC)
@@ -433,17 +431,17 @@ void Mesh::computeDs(double relax_factor, materialState state){
 		    }  
 
 		    /* perform underrelaxation on d_tilde */
-		    d_tilde = _materials[cell]->getDifTilde()[surface*_num_groups + e] 
-			* (1 - relax_factor) + relax_factor * d_tilde;
+		    d_tilde = _materials[cell]->getDifTilde()[int(FORWARD)*4*_num_groups 
+			 + surface*_num_groups + e] * (1 - relax_factor) + relax_factor * d_tilde;
 		    
 		    /* set d_hat and d_tilde */
 		    _materials[cell]->setDifHatByGroup(d_hat, e, surface);
 
-		    if (state == FSR_OLD)
+		    if (state == SHAPE)
 		        _materials[cell]->setDifTildeByGroup(d_tilde, e, surface);
 		    
-		    log_printf(DEBUG, "c: %i, g: %i, s: %i, cur: %1.3E, cur_dif: %.12f", y*_cells_x + x, e, surface, current, 
-			       current -length * (-d_tilde*(flux+flux_next) - sense * d_hat * (flux_next - flux)));		    
+		    log_printf(DEBUG, "c: %i, g: %i, s: %i, cur_dif: %.12f", y*_cells_x + x, e, surface, current -length * (-d_tilde*(flux+flux_next) - sense * d_hat * (flux_next - flux)));
+		    
 		}
 	    }
 	}
@@ -462,8 +460,8 @@ void Mesh::updateMOCFlux(){
     
     /* initialize variables */
     std::vector<int>::iterator iter;
-    double* old_flux = getFluxes(FSR_OLD);
-    double* new_flux = getFluxes(CURRENT);
+    double* old_flux = getFluxes(SHAPE);
+    double* new_flux = getFluxes(SHAPE_UPDATE);
     double old_cell_flux, new_cell_flux;
     
     /* loop over mesh cells */
@@ -878,7 +876,7 @@ int Mesh::findMeshSurface(int fsr_id, LocalCoords* coord, int angle){
     
     /* give each azimuthal angle unique surface id */
     if (surface != -1)
-	surface = surface;
+	surface = _num_currents*angle + surface;
     
     return surface;
 }
@@ -896,7 +894,7 @@ void Mesh::printCurrents(){
     for (int s = 0; s < 8; s++){
       /* loop over groups */
       for (int g = 0; g < _num_groups; g++){
-        current = getCurrents(FSR_OLD)[i*_num_groups*8 + s*_num_groups + g];
+	current = _currents[i*_num_groups*8 + s*_num_groups + g];
 	log_printf(NORMAL, "cell: %i, surface: %i, group: %i, current: %f", i, s, g, current);
       }
     }
@@ -927,8 +925,6 @@ void Mesh::splitCorners(){
 
     log_printf(INFO, "splitting corners...");
     
-    double* currents = getCurrents(FSR_OLD);
-
     for (int x = 0; x < _cells_x; x++){
 	for (int y = 0; y < _cells_y; y++){
 	    
@@ -939,41 +935,31 @@ void Mesh::splitCorners(){
 	    if (x > 0 && y < _cells_y - 1){
 		
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[((y+1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[(y*_cells_x+x-1)  *_num_groups*8 + 1*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[((y+1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[(y*_cells_x+x-1)  *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
 		}
 	    }
 	    /* if cell is on left geometry edge
 	     * give to bottom surface and left surfaces */
 	    else if (x == 0 && y != _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] +=    
-			currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[((y+1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[((y+1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
 		}
 	    }
 	    /* if cell is on bottom geometry edge
 	     * give to bottom surface and left surfaces */
 	    else if (x != 0 && y == _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
-		    currents[(y*_cells_x+x)  *_num_groups*8 + 1*_num_groups + e] += 0.5 *
-			currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[(y*_cells_x+x)  *_num_groups*8 +                 e] +=   
-			currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
-		    currents[(y*_cells_x+x-1)*_num_groups*8 + 1*_num_groups + e] += 0.5 *
-			currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, LEFT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e]);
+		    _currents[(y*_cells_x+x)  *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[(y*_cells_x+x)  *_num_groups*8 +                 e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
+		    _currents[(y*_cells_x+x-1)*_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e];
 		}
 	    }
 	    
@@ -983,41 +969,31 @@ void Mesh::splitCorners(){
 	     * give to bottom surface and right surface of mesh cell below */
 	    if (x < _cells_x - 1 && y < _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[((y+1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[(y*_cells_x+x+1)  *_num_groups*8 + 1*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[((y+1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[(y*_cells_x+x+1)  *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
 		}
 	    }
 	    /* if cell is on right geometry edge
 	     * give to bottom surface and right surface */
 	    else if (x == _cells_x - 1 && y != _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] +=
-			currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[((y+1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 1*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[((y+1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
 		}
 	    }
 	    /* if cell is on bottom geometry edge
 	     * give to bottom surface and right surface */
 	    else if (x != _cells_x - 1 && y == _cells_y - 1){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
-		    currents[(y*_cells_x+x)  *_num_groups*8 + 1*_num_groups + e] += 0.5 *
-			currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[(y*_cells_x+x)  *_num_groups*8 + 2*_num_groups + e] +=  
-			currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
-		    currents[(y*_cells_x+x+1)*_num_groups*8 + 1*_num_groups + e] += 0.5 *
-			currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT BOTTOM current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e]);
+		    _currents[(y*_cells_x+x)  *_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[(y*_cells_x+x)  *_num_groups*8 + 2*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
+		    _currents[(y*_cells_x+x+1)*_num_groups*8 + 1*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e];
 		}
 	    }
 	    
@@ -1027,41 +1003,31 @@ void Mesh::splitCorners(){
 	     * give to right surface and top surface of mesh cell to the right */
 	    if (x < _cells_x - 1 && y > 0){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[(y*_cells_x+x+1)  *_num_groups*8 + 3*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[((y-1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[(y*_cells_x+x+1)  *_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[((y-1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
 		}
 	    }
 	    /* if cell is on right geometry edge
 	     * give to right surface and top surface */
 	    else if (x == _cells_x - 1 && y != 0){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] +=    
-			currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[((y-1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[((y-1)*_cells_x+x)*_num_groups*8 + 2*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
 		}
 	    }
 	    /* if cell is on top geometry edge
 	     * give to right surface and top surface */
 	    else if (x != _cells_x - 1 && y == 0){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
-		    currents[(y*_cells_x+x)  *_num_groups*8 + 2*_num_groups + e] += 
-			currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[(y*_cells_x+x)  *_num_groups*8 + 3*_num_groups + e] += 0.5 * 
-			currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
-		    currents[(y*_cells_x+x+1)*_num_groups*8 + 3*_num_groups + e] += 0.5 * 
-			currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, RIGHT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e]);
+		    _currents[(y*_cells_x+x)  *_num_groups*8 + 2*_num_groups + e] += _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[(y*_cells_x+x)  *_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
+		    _currents[(y*_cells_x+x+1)*_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e];
 		}
 	    }
 	    
@@ -1071,49 +1037,39 @@ void Mesh::splitCorners(){
 	     * give to left surface and top surface of mesh cell to the left */
 	    if (x > 0 && y > 0){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[(y*_cells_x+x-1)  *_num_groups*8 + 3*_num_groups + e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[((y-1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[(y*_cells_x+x-1)  *_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[((y-1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
 		}
 	    }
 	    /* if cell is on left geometry edge
 	     * give to top surface and left surface */
 	    else if (x == 0 && y != 0){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
-		    currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] +=   
-			currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[((y-1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5
-			* currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
+		    _currents[(y*_cells_x+x)    *_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[(y*_cells_x+x)    *_num_groups*8 + 3*_num_groups + e] +=       _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[((y-1)*_cells_x+x)*_num_groups*8 +                 e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
 		}
 	    }
 	    /* if cell is on top geometry edge
 	     * give to top surface and left surface */
 	    else if (x != 0 && y == 0){
 		for (int e = 0; e < _num_groups; e++){
-		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
-		    currents[(y*_cells_x+x)  *_num_groups*8 +                 e] += 
-			currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[(y*_cells_x+x)  *_num_groups*8 + 3*_num_groups + e] += 0.5 *
-			currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
-		    currents[(y*_cells_x+x-1)*_num_groups*8 + 3*_num_groups + e] += 0.5 * 
-			currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    log_printf(DEBUG, "cell: %i, group: %i, LEFT TOP current: %f", y*_cells_x+x,e, _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e]);
+		    _currents[(y*_cells_x+x)  *_num_groups*8 +                 e] += _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[(y*_cells_x+x)  *_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
+		    _currents[(y*_cells_x+x-1)*_num_groups*8 + 3*_num_groups + e] += 0.5 * _currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e];
 		}
 	    }
 
 	    for (int e = 0; e < _num_groups; e++){
-		currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e] = 0.0;
-		currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e] = 0.0;
-		currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e] = 0.0;
-		currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e] = 0.0;
+		_currents[(y*_cells_x+x)*_num_groups*8 + 4*_num_groups + e] = 0.0;
+		_currents[(y*_cells_x+x)*_num_groups*8 + 5*_num_groups + e] = 0.0;
+		_currents[(y*_cells_x+x)*_num_groups*8 + 6*_num_groups + e] = 0.0;
+		_currents[(y*_cells_x+x)*_num_groups*8 + 7*_num_groups + e] = 0.0;
 	    }
 	}
     }
@@ -1224,7 +1180,7 @@ int Mesh::findCellId(LocalCoords* coord){
  * @param surface_currents pointer to surface currents array
  **/
 void Mesh::setSurfaceCurrents(double* surface_currents){
-    _currents.insert(std::pair<materialState, double*>(FSR_OLD, surface_currents));
+  _currents = surface_currents;
 }
 
 
@@ -1389,8 +1345,8 @@ int Mesh::getCellNext(int cell_num, int surface_id){
  * @brief Get array of surface currents
  * @return _currents array of surface currents
  **/
-double* Mesh::getCurrents(materialState state){
-    return _currents.at(state);
+double* Mesh::getCurrents(){
+  return _currents;
 }
 
 
@@ -1438,14 +1394,22 @@ void Mesh::setNumAzim(int num_azim){
 
 
 /**
+ * @brief Get the number of surface currents
+ * @return _num_currents number of surface currents
+ **/
+int Mesh::getNumCurrents(){
+  return _num_currents;
+}
+
+
+/**
  * @brief Initializes the surface currents
  **/
 void Mesh::initializeSurfaceCurrents(){
-    double* currents = _currents.at(FSR_OLD);
-    currents = new double[8*_cells_x*_cells_y*_num_groups];
+  _currents = new double[8*_cells_x*_cells_y*_num_groups];
 
-    for (int i = 0; i < 8*_cells_x*_cells_y*_num_groups; i++)
-	currents[i] = 0.0;
+  for (int i = 0; i < 8*_cells_x*_cells_y*_num_groups; i++)
+    _currents[i] = 0.0;
 }
 
 
@@ -1515,21 +1479,11 @@ solveType Mesh::getSolveType(){
 }
 
 
+/* Create an initialize flux array to 1.0 */
 void Mesh::createNewFlux(materialState state){
   double* flux = new double[_cells_x*_cells_y*_num_groups];
+  vecSet(flux, 1.0, _cells_x*_cells_y*_num_groups);
   _fluxes.insert(std::pair<materialState, double*>(state, flux));
-}
-
-
-void Mesh::createNewFrequency(materialState state){
-  double* frequency = new double[_cells_x*_cells_y*_num_groups];
-  _frequency.insert(std::pair<materialState, double*>(state, frequency));
-}
-
-
-void Mesh::createNewCurrent(materialState state){
-  double* current = new double[_cells_x*_cells_y*_num_groups*8];
-  _currents.insert(std::pair<materialState, double*>(state, current));
 }
 
 
@@ -1537,56 +1491,29 @@ void Mesh::copyFlux(materialState from_state, materialState to_state){
 
     _timer->startTimer();
 
-    if (from_state != FSR && to_state != FSR){
-	double* from_flux = _fluxes.at(from_state);
-	double* to_flux = _fluxes.at(to_state);
-        #pragma omp parallel for
-	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-	    to_flux[i] = from_flux[i];
-    }
-    else if (to_state == FSR){
-	double* from_flux = _fluxes.at(from_state);
-        #pragma omp parallel for
-	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-	    _FSR_fluxes[i] = from_flux[i];
-    }
-    else{
-	double* to_flux = _fluxes.at(to_state);
-        #pragma omp parallel for
-	for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-	    to_flux[i] = _FSR_fluxes[i];
-    }
+    vecCopy(_fluxes.at(from_state), _fluxes.at(to_state), _cells_x*_cells_y*_num_groups);
 
     _timer->stopTimer();
     _timer->recordSplit("Copy flux");
 }
 
 
-void Mesh::copyFrequency(materialState from_state, materialState to_state){
+void Mesh::copyDs(materialState from_state, materialState to_state){
 
-  _timer->startTimer();
-
-  double* from_flux = _frequency.at(from_state);
-  double* to_flux = _frequency.at(to_state);
-  for (int i = 0; i < _cells_x*_cells_y*_num_groups; i++)
-    to_flux[i] = from_flux[i];
-
-  _timer->stopTimer();
-  _timer->recordSplit("Copy frequency");
-}
-
-
-void Mesh::copyCurrent(materialState from_state, materialState to_state){
+    double* dif_tilde;
+    int ngs = 4*_num_groups;
 
     _timer->startTimer();
-    
-    double* from_current = _currents.at(from_state);
-    double* to_current = _currents.at(to_state);
-    for (int i = 0; i < _cells_x*_cells_y*_num_groups*4; i++)
-	to_current[i] = from_current[i];
+
+    for (int i = 0; i < _cells_x*_cells_y; i++){
+	dif_tilde = _materials[i]->getDifTilde();
+	
+	for (int gs = 0; gs < ngs; gs++)
+	    dif_tilde[int(to_state)*ngs + gs] = dif_tilde[int(from_state)*ngs + gs];
+    }
     
     _timer->stopTimer();
-    _timer->recordSplit("Copy current");
+    _timer->recordSplit("Copy Ds");
 }
 
 
@@ -1596,7 +1523,6 @@ void Mesh::dumpFlux(materialState state){
     for (int e = 0; e < _num_groups; e++)
       log_printf(NORMAL, "cell: %i, group: %i, flux: %f", i, e, _fluxes.at(state)[i*_num_groups+e]);
   }
-
 }
 
 
@@ -1767,22 +1693,27 @@ int* Mesh::getFSRsToCells(){
 }
 
 
-void Mesh::interpolateCurrent(double ratio){
+void Mesh::interpolateDs(double ratio){
 
-    double* fwd_current = getCurrents(FORWARD);
-    double* pre_current = getCurrents(PREVIOUS_CONV);
-    double* cur_current = getCurrents(CURRENT);
+    int ngs = 4*_num_groups;
+    double* dif_tilde;
     double slope;
 
-    #pragma omp parallel for private(slope)
-    for (int i = 0; i < _num_groups*_cells_x*_cells_y*4; i++){
-	slope = fwd_current[i] - pre_current[i];
-	cur_current[i] = pre_current[i] + ratio * slope;
+    _timer->startTimer();
+
+    /* loop over mesh cells in y direction */
+    for (int i = 0; i < _cells_y * _cells_x; i++){
+	dif_tilde = _materials[i]->getDifTilde();
+
+	/* loop over surfaces and groups in a cell */
+	for (int gs = 0; gs < ngs; gs++){
+	    slope = dif_tilde[int(FORWARD)*ngs+gs] - dif_tilde[int(PREVIOUS_CONV)*ngs+gs];
+	    dif_tilde[int(CURRENT)*ngs+gs] = dif_tilde[int(PREVIOUS_CONV)*ngs+gs] + ratio * slope;
+	}
     }
 
     _timer->stopTimer();
-    _timer->recordSplit("Interpolate current");
-
+    _timer->recordSplit("Interpolate Ds");
 }
 
 
@@ -1841,8 +1772,8 @@ void Mesh::zeroDs(){
 }
 
 
-double* Mesh::getFrequencies(materialState state){
-  return _frequency.at(state);
+double* Mesh::getFrequency(){
+  return _frequency;
 }
 
 
@@ -1894,3 +1825,15 @@ double Mesh::getTemperature(int fsr_id){
   return _FSR_materials[fsr_id]->getTemperature(CURRENT);
 
 }
+
+
+void Mesh::setFlux(materialState state, double* flux){
+   _fluxes.insert(std::pair<materialState, double*>(state, flux));
+}
+
+
+void Mesh::eraseFlux(materialState state){
+   _fluxes.erase(state);
+}
+
+

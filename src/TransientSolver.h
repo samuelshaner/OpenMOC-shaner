@@ -48,7 +48,6 @@ private:
     int _ndg;
     int _ng;
     
-    double _nu;
     double _kappa;
     double _alpha;
 
@@ -69,6 +68,9 @@ private:
     /* global counters */
     int _amp_solve_counter;
 
+    /* prolongation flag*/
+    bool _prolongation;
+
     
 public:
     TransientSolver(Geometry* geom, Tcmfd* tcmfd, Cmfd* cmfd,
@@ -79,6 +81,7 @@ public:
     double computeCoreTemp();  
     void computeVolCore();
     void sync(materialState state);
+    void syncMaterials(materialState state);
     void copyPrecConc(materialState state_from, materialState state_to);
     void copyTemperature(materialState state_from, materialState state_to);
     void copyFieldVariables(materialState state_from, materialState state_to);
@@ -87,7 +90,7 @@ public:
     double computeResidual(solveType solve_type);
     void trimVectors(int len_conv);
     void initializePrecursorConc();
-    void updatePrecursorConc();
+    void updatePrecursorConc(materialState state_from=PREVIOUS, materialState state_to=CURRENT);
     void initializeTimeStepper();
     void initializeTransientMaterials();
     void initializeTransientLogfile();
@@ -100,17 +103,17 @@ public:
     void setDtMOC(double dt);
     void setDtCMFD(double dt);  
     void setKappa(double kappa);
-    void setNu(double nu);
     void setAlpha(double alpha);
     void setNumDelayGroups(int num_groups);
     void setTransientMethod(const char* trans_type);
     void setPowerInit(double power);
     void setStartTime(double time);
     void setEndTime(double time);
+    void setProlongation(bool prolong);
     double getPower();
     double getTime();
     double getTemp();
-
+    
 
 
 };

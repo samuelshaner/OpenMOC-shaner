@@ -29,7 +29,7 @@ inline double norm(double* x, int nc);
 inline void vecWAXPY(double* vec_w, double a, double* vec_x, double* vec_y, int length);
 inline void vecWAXPY(float* vec_w, double a, double* vec_x, double* vec_y, int length);
 inline void linearSolve(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter);
-inline void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter);
+inline void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter, double* mat_M);
 inline void dumpVector(double* vec, int length);
 inline void vecDivide(double* vec_w, double* vec_y, double* vec_x, int length);
 
@@ -275,13 +275,14 @@ void linearSolve(double* mat, double* vec_x, double* vec_b, double* vec_x_old, d
 }
 
 
-void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter){
+void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old, double conv, double omega, int cx, int cy, int ng, int max_iter, double* mat_M){
 
     double norm = 1e10;
     int row = 0;
     double val = 0.0;
     int iter = 0;
     int x, y, g, e;
+    double source_old = 0.0, source_new = 0.0;
 
     /* perform GS iteration */
     while (norm > conv){
@@ -367,13 +368,31 @@ void linearSolveRB(double* mat, double* vec_x, double* vec_b, double* vec_x_old,
 	    }
 	}
 	
+	
 	norm = 0.0;
-	for (int i = 0; i < cx*cy*ng; i++){
-	    if (vec_x[i] != 0.0)
-		norm += pow((vec_x[i] - vec_x_old[i])/(vec_x[i]), 2);
+	for (int i = 0; i < cx*cy; i++){
+	  for (int g = 0; g < ng; g++){
+	    source_new = 0.0;
+	    source_old = 0.0;
+	    for (int e = 0; e < ng; e++){
+	      source_new += mat_M[(i*ng+g)*ng+e] * vec_x    [i*ng+e];
+	      source_old += mat_M[(i*ng+g)*ng+e] * vec_x_old[i*ng+e];
+	    }
+	    if (source_new != 0.0)
+		norm += pow((source_new - source_old)/(source_new), 2);
+	  }
 	}
 
-	norm = pow(norm, 0.5) / (cx*cy*ng);
+	norm = pow(norm/(cx*cy*ng), 0.5);
+
+	//norm = 0.0;
+	//for (int i = 0; i < cx*cy*ng; i++){
+	//    if (vec_x[i] != 0.0)
+	//	norm += pow((vec_x[i] - vec_x_old[i])/(vec_x[i]), 2);
+	//}
+
+	//norm = pow(norm, 0.5) / (cx*cy*ng);
+
 	iter++;
 
         //std::cout << "vec x sum: " << vecSum(vec_x, cx*cy*ng) << std::endl;

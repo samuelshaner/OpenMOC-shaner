@@ -252,8 +252,7 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
     double* coarse_flux_old = mesh->getFluxes(PREVIOUS_CONV);
     double* volumes = mesh->getVolumes();
     double* velocity = mesh->getVelocity();
-    double* frequency_new = mesh->getFrequencies(CURRENT);
-    double* frequency_old = mesh->getFrequencies(PREVIOUS);
+    double* frequency = mesh->getFrequency();
     double old_flux;
     double dt = mesh->getDtMOC();
     TimeStepper* ts = mesh->getTimeStepper();
@@ -312,7 +311,7 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 			method_source = 1.0/(velocity[G]) * 
 			    (old_flux * coarse_flux_new[i*_num_groups+G] 
 			    / coarse_flux_old[i*_num_groups+G] / dt 
-			     - _scalar_flux(r,G) * (1.0 / dt + frequency_new[i*_num_groups+G]));
+			     - _scalar_flux(r,G) * (1.0 / dt + frequency[i*_num_groups+G]));
 		    }
 		    
 		    /* Set the total source for region r in group G */
@@ -344,12 +343,18 @@ FP_PRECISION ThreadPrivateSolverTransient::computeFSRSources() {
 		_reduced_source(r,G) = _source(r,G) / sigma_t[G];
 		
 		/* Compute the norm of residual of the source in the region, group */
-		if (fabs(_source(r,G)) > 1E-10)
-		    _source_residuals(r,G) = pow((_source(r,G) - _old_source(r,G)) 
-						 / _source(r,G), 2);
+		//if (fabs(_source(r,G)) > 1E-10)
+		//    _source_residuals(r,G) = pow((_source(r,G) - _old_source(r,G)) 
+		//				 / _source(r,G), 2);
+		
+		/* Compute the norm of residual of the source in the region, group */
+		if (fabs(chi[G]*fission_source/_k_eff) > 1E-10)
+		  _source_residuals(r,G) = pow((chi[G]*fission_source/_k_eff - _old_source(r,G)) 
+					       / (chi[G]*fission_source/_k_eff), 2);
 		
 		/* Update the old source */
-		_old_source(r,G) = _source(r,G);		
+		//_old_source(r,G) = _source(r,G);
+		_old_source(r,G) = chi[G]*fission_source/_k_eff;
 	    }
 	}
     }

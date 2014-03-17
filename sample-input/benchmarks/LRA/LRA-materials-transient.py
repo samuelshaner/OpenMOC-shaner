@@ -36,7 +36,7 @@ lra_materials['region_1']['Total XS'] = [0.2656, 1.5798]
 
 lra_materials['region_1']['Scattering XS'] = [0.232022, 0.02533, 0.00, 1.479479]
 
-lra_materials['region_1']['Fission XS'] = [0.002, 0.05]
+lra_materials['region_1']['Fission XS'] = [0.0018938272, 0.044897119]
 
 lra_materials['region_1']['Nu Fission XS'] = [0.004602, 0.1091]
 
@@ -68,7 +68,7 @@ lra_materials['region_2']['Total XS'] = [0.2629, 1.7525]
 
 lra_materials['region_2']['Scattering XS'] = [0.22803, 0.02767, 0.00, 1.682071]
 
-lra_materials['region_2']['Fission XS'] = [0.002, 0.045]
+lra_materials['region_2']['Fission XS'] = [0.0018967078, 0.035699588]
 
 lra_materials['region_2']['Nu Fission XS'] = [0.004609, 0.08675]
 
@@ -100,7 +100,7 @@ lra_materials['region_3']['Total XS'] = [0.2648, 1.5941]
 
 lra_materials['region_3']['Scattering XS'] = [0.230588, 0.02617, 0.00, 1.510694]
 
-lra_materials['region_3']['Fission XS'] = [0.002, 0.045]
+lra_materials['region_3']['Fission XS'] = [0.0019189300, 0.042016461]
 
 lra_materials['region_3']['Nu Fission XS'] = [0.004663, 0.1021]
 
@@ -132,7 +132,7 @@ lra_materials['region_4']['Total XS'] = [0.2648, 1.5941]
 
 lra_materials['region_4']['Scattering XS'] = [0.230588, 0.02617, 0.00, 1.520810]
 
-lra_materials['region_4']['Fission XS'] = [0.002, 0.045]
+lra_materials['region_4']['Fission XS'] = [0.0019189300, 0.042016461]
 
 lra_materials['region_4']['Nu Fission XS'] = [0.004663, 0.1021]
 
@@ -169,7 +169,7 @@ lra_materials['region_5']['Total XS'] = [0.2648, 1.5941]
 
 lra_materials['region_5']['Scattering XS'] = [0.230588, 0.02617, 0.00, 1.510694]
 
-lra_materials['region_5']['Fission XS'] = [0.002, 0.045]
+lra_materials['region_5']['Fission XS'] = [0.0019189300, 0.042016461]
 
 lra_materials['region_5']['Nu Fission XS'] = [0.004663, 0.1021]
 
