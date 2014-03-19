@@ -43,6 +43,8 @@ Cmfd::Cmfd(Geometry* geometry, double conv_linear, double conv_nonlinear) {
     _b_prime  = new double[_nc];  
     _AM       = new double[_nc*(4+_ng)];
     _y        = new double[_nc];
+
+    /* checking implementation of new github private repo */
     
     /* If solving diffusion problem, create arrays for FSR parameters */
     if (_solve_method == DIFFUSION)
